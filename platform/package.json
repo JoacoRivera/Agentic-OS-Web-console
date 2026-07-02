@@ -1,0 +1,21 @@
+{
+  "name": "agentic-os-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Agentic OS web console (Odysseus) — localhost-only private console over the memory repo",
+  "workspaces": [
+    "server",
+    "dashboard"
+  ],
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "npm run build --workspace dashboard",
+    "start": "node server/src/index.js",
+    "test": "npm test --workspace server",
+    "verify": "node scripts/verify.mjs",
+    "check:metrics-groundtruth": "node scripts/check-metrics-groundtruth.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

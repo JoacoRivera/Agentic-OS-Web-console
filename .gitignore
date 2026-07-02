@@ -1,0 +1,5 @@
+node_modules/
+.claude/settings.local.json
+platform/dashboard/dist/
+platform/apps/*/dist/
+platform/logs/
