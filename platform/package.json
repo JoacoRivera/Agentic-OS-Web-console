@@ -12,7 +12,8 @@
     "build": "npm run build --workspace dashboard",
     "start": "node server/src/index.js",
     "test": "npm test --workspace server",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "check:metrics-groundtruth": "node scripts/check-metrics-groundtruth.mjs"
   },
   "engines": {
     "node": ">=20"

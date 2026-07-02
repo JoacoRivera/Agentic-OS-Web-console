@@ -1,6 +1,6 @@
 import { SECTIONS } from '../sections.js';
 
-export default function Sidebar({ section, onSelect, ready }) {
+export default function Sidebar({ section, onSelect, ready, metrics }) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -24,6 +24,17 @@ export default function Sidebar({ section, onSelect, ready }) {
               <span className={`chip ${ready ? 'ok' : 'warn'}`}>
                 <span className="status-dot" />
                 {ready ? 'ready' : 'offline'}
+              </span>
+            )}
+            {id === 'review-queue' && metrics && (
+              <span className={`chip ${metrics.draftN > 0 ? 'warn' : 'ok'}`}>
+                {metrics.draftN} draft
+              </span>
+            )}
+            {id === 'memory-health' && metrics && (
+              <span className={`chip ${metrics.health.healthStale ? 'warn' : 'ok'}`}>
+                <span className="status-dot" />
+                {metrics.health.healthStale ? 'due' : 'ok'}
               </span>
             )}
           </button>

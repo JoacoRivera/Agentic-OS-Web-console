@@ -18,6 +18,7 @@ in Phase 1) — see ADR-0005.
 | `npm start`      | Serve API + built dashboard on `http://127.0.0.1:3001`     |
 | `npm test`       | In-process API tests (Seam 1: exported `app`, no bind)     |
 | `npm run verify` | Boot smoke (Seam 2: real startup, bind + guard checks)     |
+| `npm run check:metrics-groundtruth` | `/api/metrics` vs an independent filesystem recount (permanent check, ADR-0002; no `aos-hud.js` dependency) |
 
 ## Configuration (env)
 
@@ -27,6 +28,19 @@ in Phase 1) — see ADR-0005.
 | `HOST`               | `127.0.0.1`                      | Non-loopback without auth **fails startup** (ADR-0005)       |
 | `REPO_ROOT`          | `../../..` from `server/src/`    | Path to the Agentic OS memory repo. Set explicitly when developing outside it (e.g. `REPO_ROOT=~/agents/agentic-os`) |
 | `EXPOSE_RAW_CONTENT` | `false`                          | Gates raw **content** over HTTP only; raw metrics always computed (ADR-0005) |
+
+## Metrics (`GET /api/metrics`)
+
+The **canonical** memory-metrics implementation (ADR-0002): a live filesystem scan per
+request (no cache — refresh is "fetch again"), porting the exact HUD definitions. Skip
+basenames `index|log|_template|README`; counts `wikiN` (published memory — the headline),
+`rawN` (append-only raw capture archive, **not** a backlog), `all` (files across
+wiki+raw+templates+dashboards minus `_template`; **double-counts a promoted item** — never
+"total memory"), `examples`, `projects`, `workflows`, `rawProj`, `rawFlow`; captures
+`capN`/`draftN`/`apprN` + `drafts[]`; a 30-day `series` keyed on **`pathAddedDate`**
+(`git log --diff-filter=A`; repository *file* growth, not knowledge accumulation —
+ADR-0003); a 7-day `week` by mtime (`weekTotal`, `activeDays`); `recent`; `health` from
+the first `lint` entry in `wiki/log.md`; `targets` + `trend`.
 
 ## Security model (Phase 1)
 

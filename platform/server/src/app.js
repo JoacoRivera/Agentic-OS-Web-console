@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { hostOriginGuard } from './security.js';
+import { computeMetrics } from './metrics.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '../../dashboard/dist');
@@ -30,6 +31,16 @@ export function createApp(config) {
       refreshMs: config.REFRESH_MS,
       now: new Date().toISOString(),
     });
+  });
+
+  // Canonical metrics (ADR-0002): a live scan per request — no cache, no
+  // TTL; refresh is simply "fetch again" (plan: Live reads).
+  app.get('/api/metrics', async (req, res) => {
+    try {
+      res.json(await computeMetrics(config));
+    } catch (err) {
+      res.status(500).json({ error: 'metrics-failed', message: err.message });
+    }
   });
 
   // Controlled execution is Phase 3 (ADR-0001); until then both endpoints 501.

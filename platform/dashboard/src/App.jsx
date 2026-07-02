@@ -11,14 +11,31 @@ const DEFAULT_REFRESH_MS = 30000;
 export default function App() {
   const [sectionId, setSectionId] = useState('overview');
   const [status, setStatus] = useState(null);
+  const [metrics, setMetrics] = useState(null);
+  const [metricsError, setMetricsError] = useState(null);
   const [poll, setPoll] = useState(true);
 
+  // Live reads (plan): refresh is simply "fetch again" — no cache semantics.
   const refresh = useCallback(async () => {
     try {
       const res = await fetch('/api/status');
       setStatus(res.ok ? await res.json() : null);
     } catch {
       setStatus(null);
+    }
+    try {
+      const res = await fetch('/api/metrics');
+      if (res.ok) {
+        setMetrics(await res.json());
+        setMetricsError(null);
+      } else {
+        const body = await res.json().catch(() => ({}));
+        setMetrics(null);
+        setMetricsError(body.message || `HTTP ${res.status}`);
+      }
+    } catch (err) {
+      setMetrics(null);
+      setMetricsError(err.message);
     }
   }, []);
 
@@ -33,7 +50,7 @@ export default function App() {
 
   let view;
   if (sectionId === 'overview') {
-    view = <OverviewView status={status} />;
+    view = <OverviewView status={status} metrics={metrics} metricsError={metricsError} />;
   } else if (sectionId === 'settings') {
     view = <SettingsView status={status} poll={poll} onPollChange={setPoll} />;
   } else {
@@ -42,7 +59,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <Sidebar section={sectionId} onSelect={setSectionId} ready={Boolean(status)} />
+      <Sidebar section={sectionId} onSelect={setSectionId} ready={Boolean(status)} metrics={metrics} />
       <div className="main">
         <header className="topbar">
           <span className="topbar-title">{section.label}</span>

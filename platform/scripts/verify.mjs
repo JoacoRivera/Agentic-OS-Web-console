@@ -119,6 +119,17 @@ try {
   record('/api/status responds 200 with status=ready', ok.status === 200 && JSON.parse(ok.body).status === 'ready');
   record('no permissive CORS header on responses', ok.headers['access-control-allow-origin'] === undefined);
 
+  const met = await req(port, { reqPath: '/api/metrics' });
+  const metBody = met.status === 200 ? JSON.parse(met.body) : {};
+  record(
+    '/api/metrics responds 200 with the documented shape',
+    met.status === 200 &&
+      ['wikiN', 'rawN', 'all', 'capN', 'draftN', 'apprN', 'weekTotal', 'trend'].every((f) => f in metBody) &&
+      metBody.series?.length === 30 &&
+      metBody.week?.length === 7 &&
+      'healthStale' in (metBody.health ?? {})
+  );
+
   const badHost = await req(port, { headers: { Host: 'evil.example' } });
   record('non-loopback Host header is rejected (403)', badHost.status === 403);
 
