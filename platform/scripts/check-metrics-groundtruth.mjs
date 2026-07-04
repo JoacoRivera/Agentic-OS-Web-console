@@ -160,19 +160,24 @@ let stdout = '';
 let stderr = '';
 child.stdout.on('data', (d) => (stdout += d));
 child.stderr.on('data', (d) => (stderr += d));
-await new Promise((resolve, reject) => {
-  const timer = setTimeout(() => reject(new Error(`server boot timeout; stderr: ${stderr}`)), 8000);
-  child.stdout.on('data', () => {
-    if (stdout.includes('listening on')) {
-      clearTimeout(timer);
-      resolve();
-    }
-  });
-  child.on('exit', (code) => reject(new Error(`server exited early (${code}); stderr: ${stderr}`)));
-});
-
 let failed = 0;
+// The boot wait sits inside try/finally so a boot timeout or early exit
+// still reaches child.kill() and never leaks a server process.
 try {
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`server boot timeout; stderr: ${stderr}`)),
+      8000
+    );
+    child.stdout.on('data', () => {
+      if (stdout.includes('listening on')) {
+        clearTimeout(timer);
+        resolve();
+      }
+    });
+    child.on('exit', (code) => reject(new Error(`server exited early (${code}); stderr: ${stderr}`)));
+  });
+
   const [console_, truth] = await Promise.all([getJson(port, '/api/metrics'), recount()]);
 
   const check = (name, got, want) => {
