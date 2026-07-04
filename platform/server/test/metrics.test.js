@@ -174,6 +174,16 @@ test('captures: approval via the HUD status regex (inline, list item, frontmatte
   assert.equal(metrics.drafts[0].path, 'raw/projects/client/examples/cap-draft2.md');
 });
 
+test('drafts[] is capped by DRAFT_LIMIT; draftN still counts the whole queue', async () => {
+  const config = { ...createConfig({ REPO_ROOT: root }), DRAFT_LIMIT: 1 };
+  const capped = await computeMetrics(config, now);
+  assert.equal(capped.draftN, 2); // cap trims the list, not the count
+  assert.deepEqual(
+    capped.drafts.map((d) => d.name),
+    ['cap-draft2'] // the newest draft survives the cap
+  );
+});
+
 test('isApprovedText matches the HUD regex exactly', () => {
   assert.equal(isApprovedText('Status: Approved'), true);
   assert.equal(isApprovedText('  status :  approved'), true);
