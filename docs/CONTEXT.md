@@ -105,8 +105,10 @@ These three are deliberately distinct concepts and must not be conflated in any 
 **Skill**:
 An LLM-facing capability/instruction pack from `.claude/skills/*/SKILL.md`. Invoked by
 Claude, requires LLM judgment. **Not executable by the console** — the console may only
-*describe* a skill or guide a human through invoking it. The five repo skills: `/ingest`,
-`/query-memory`, `/wiki-lint`, `/capture-approved-example`, `/promote-draft-memory`.
+*describe* a skill or guide a human through invoking it. All repo skills are
+**`aos-*`-prefixed** (13 as of 2026-07-04, e.g. `/aos-ingest`, `/aos-query-memory`,
+`/aos-wiki-lint`); the registry scans the directory, never a hardcoded list — the old
+unprefixed invocations (`/ingest`, `/query-memory`, …) are retired.
 _Avoid_: command, operation, tool
 
 **Workflow**:

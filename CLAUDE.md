@@ -36,8 +36,10 @@ The console runs at `platform/` *inside the Agentic OS repo*; repo root resolves
 
 These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if tests pass.
 
-1. **The console never executes LLM Skills** (ADR-0001). The five repo Skills (`/ingest`,
-   `/query-memory`, `/wiki-lint`, `/capture-approved-example`, `/promote-draft-memory`) need
+1. **The console never executes LLM Skills** (ADR-0001). The repo Skills — all
+   `aos-*`-prefixed, currently 13 (e.g. `/aos-ingest`, `/aos-query-memory`, `/aos-wiki-lint`,
+   `/aos-capture-approved-example`, `/aos-promote-draft-memory`, `/aos-hook`,
+   `/aos-pre-commit`, …) — need
    LLM judgment and can only ever be **Guided Operations** (checklist + command preview). Do
    not shell out to headless Claude or pretend a Skill is an npm script. The Phase-3
    executable allowlist contains **only** deterministic checks (`npm run verify`,
@@ -93,8 +95,9 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
 Three deliberately distinct, non-interchangeable concepts (`CONTEXT.md`):
 
 - **Skill** — an LLM-facing capability pack from `.claude/skills/*/SKILL.md`. Invoked by
-  Claude; not console-executable. There are exactly **five** (above); the registry scans the
-  directory — never hardcode a phantom Skill (e.g. `/bw2-update-memory` does not exist).
+  Claude; not console-executable. All are **`aos-*`-prefixed** (13 as of 2026-07-04); the
+  registry scans the directory — never hardcode a phantom Skill (`/bw2-update-memory` does
+  not exist, and the old unprefixed names `/ingest`, `/query-memory`, … are retired).
 - **Workflow** — a documented runbook/procedure from `wiki/workflows/*.md`, followed by a
   human or LLM; not console-executable. Has a `workflow_kind`.
 - **Operation** — a console-facing **action card**. Two strict subtypes: **Guided** (checklist
