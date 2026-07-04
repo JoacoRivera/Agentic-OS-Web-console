@@ -24,6 +24,10 @@ export function createConfig(env = process.env) {
     REPO_ROOT: env.REPO_ROOT
       ? path.resolve(env.REPO_ROOT.replace(/^~(?=\/|$)/, env.HOME ?? '~'))
       : path.resolve(__dirname, '../../..'),
+    // Audit sink (gitignored): P3 execution appends here; P1 only tails it.
+    AUDIT_LOG_PATH: env.AUDIT_LOG_PATH
+      ? path.resolve(env.AUDIT_LOG_PATH)
+      : path.resolve(__dirname, '../../logs/operations.log'),
     // Gates raw *content* over HTTP only; raw metrics are always computed (ADR-0005).
     EXPOSE_RAW_CONTENT: env.EXPOSE_RAW_CONTENT === 'true',
     // No auth layer exists in Phase 1; this stays false until one is designed.

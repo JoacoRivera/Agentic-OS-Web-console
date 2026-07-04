@@ -224,6 +224,25 @@ try {
   const badOrigin = await req(port, { headers: { Origin: 'https://evil.example' } });
   record('cross-origin Origin is rejected (403)', badOrigin.status === 403);
 
+  // Operations catalog (ADR-0001): typed guided/executable, and every
+  // LLM-Skill-backed operation must be guided — never executable.
+  const ops = await req(port, { reqPath: '/api/operations' });
+  const opsBody = ops.status === 200 ? JSON.parse(ops.body) : {};
+  record(
+    '/api/operations returns a typed catalog; skill-backed operations are guided',
+    ops.status === 200 &&
+      Array.isArray(opsBody.operations) &&
+      opsBody.operations.length > 0 &&
+      opsBody.operations.every((o) => ['guided', 'executable'].includes(o.type)) &&
+      opsBody.operations.filter((o) => o.skill).every((o) => o.type === 'guided')
+  );
+
+  const audit = await req(port, { reqPath: '/api/audit' });
+  record(
+    '/api/audit responds 200 with entries[] (empty until P3 execution)',
+    audit.status === 200 && Array.isArray(JSON.parse(audit.body).entries)
+  );
+
   const opRun = await req(port, { method: 'POST', reqPath: '/api/operations/x/run' });
   const opDry = await req(port, { method: 'POST', reqPath: '/api/operations/x/dry-run' });
   record('POST /api/operations/:id/{run,dry-run} return 501 before P3', opRun.status === 501 && opDry.status === 501);
