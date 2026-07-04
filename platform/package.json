@@ -8,15 +8,14 @@
     "dashboard"
   ],
   "scripts": {
-    "dev": "node scripts/dev.mjs",
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
     "build": "npm run build --workspace dashboard",
-    "start": "node server/src/index.js",
+    "start": "node --env-file-if-exists=.env server/src/index.js",
     "test": "npm test --workspace server",
-    "verify": "node scripts/verify.mjs",
-    "check:metrics-groundtruth": "node scripts/check-metrics-groundtruth.mjs",
-    "check:hud-parity": "node scripts/check-hud-parity.mjs"
+    "verify": "node --env-file-if-exists=.env scripts/verify.mjs",
+    "check:metrics-groundtruth": "node --env-file-if-exists=.env scripts/check-metrics-groundtruth.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22.9"
   }
 }

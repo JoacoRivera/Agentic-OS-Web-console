@@ -9,9 +9,9 @@
  *   only. Until then the catalog merely *describes* the allowlist;
  *   run/dry-run return 501.
  *
- * `check:hud-parity` is a temporary migration gate (`migrationOnly: true`),
- * NOT part of the permanent allowlist — it is retired by an explicit human
- * HUD-deprecation sign-off (ADR-0002).
+ * The `check:hud-parity` migration gate was retired by the human
+ * HUD-deprecation sign-off of 2026-07-04 (ADR-0002 amendment); the
+ * `migrationOnly` escape hatch remains for any future migration gate.
  */
 
 /** Permanent Phase-3 executable allowlist — deterministic checks only. */
@@ -196,14 +196,6 @@ const EXECUTABLE_OPERATIONS = [
     description:
       'Console metrics vs an independent filesystem recount — the permanent correctness check (no aos-hud.js dependency).',
     commandPreview: 'npm run check:metrics-groundtruth',
-  },
-  {
-    id: 'check:hud-parity',
-    title: 'HUD parity (migration gate)',
-    description:
-      'Console vs the deprecated Obsidian HUD, during migration only. Retired by an explicit human HUD-deprecation sign-off (ADR-0002).',
-    commandPreview: 'npm run check:hud-parity',
-    migrationOnly: true,
   },
 ];
 

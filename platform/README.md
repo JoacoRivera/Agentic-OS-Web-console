@@ -19,15 +19,19 @@ in Phase 1) — see ADR-0005.
 | `npm test`       | In-process API tests (Seam 1: exported `app`, no bind)     |
 | `npm run verify` | Boot smoke (Seam 2: real startup, bind + guard checks)     |
 | `npm run check:metrics-groundtruth` | `/api/metrics` vs an independent filesystem recount (permanent check, ADR-0002; no `aos-hud.js` dependency) |
-| `npm run check:hud-parity` | **Migration-only** (`migrationOnly: true`): `/api/metrics` vs the real `dashboards/aos-hud.js` executed under a Dataview shim. Not in the permanent allowlist — see below |
 
 ## Configuration (env)
+
+`dev` / `start` / `verify` / `check:metrics-groundtruth` load `platform/.env` when it
+exists (`--env-file-if-exists`, Node ≥ 22.9). This repo lives **outside** the memory repo,
+so copy `.env.example` to `.env` once (it sets `REPO_ROOT=~/agents/agentic-os`) and plain
+`npm start` works from this folder. `.env` is gitignored.
 
 | Var                  | Default                          | Notes                                                        |
 | -------------------- | -------------------------------- | ------------------------------------------------------------ |
 | `PORT`               | `3001`                           |                                                              |
 | `HOST`               | `127.0.0.1`                      | Non-loopback without auth **fails startup** (ADR-0005)       |
-| `REPO_ROOT`          | `../../..` from `server/src/`    | Path to the Agentic OS memory repo. Set explicitly when developing outside it (e.g. `REPO_ROOT=~/agents/agentic-os`) |
+| `REPO_ROOT`          | `../../..` from `server/src/`    | Path to the Agentic OS memory repo. Set in `.env` when developing outside it (e.g. `REPO_ROOT=~/agents/agentic-os`) |
 | `EXPOSE_RAW_CONTENT` | `false`                          | Gates raw **content** over HTTP only; raw metrics always computed (ADR-0005) |
 
 ## Metrics (`GET /api/metrics`)
@@ -59,25 +63,16 @@ doesn't apply. Editorial niceties (examples, "when to use", related skill, usage
 reference) are informational-only. Per-workflow lookups use `?path=` — workflow paths
 contain slashes.
 
-## HUD migration (`check:hud-parity`)
+## HUD deprecation (signed off 2026-07-04)
 
 This console is the **canonical** memory-metrics implementation; the Obsidian HUD
-(`dashboards/aos-hud.js`) is being migrated off and **deprecated** (ADR-0002). During the
-migration, `npm run check:hud-parity` validates the handover: it executes the real,
-**byte-for-byte unchanged** `dashboards/aos-hud.js` from the memory repo inside a minimal
-Node Dataview shim, extracts the numbers the HUD renders, and compares them against
-`/api/metrics`.
-
-- **Migration-only** — the operation card is flagged `migrationOnly: true` and it is
-  **not** in the permanent executable allowlist. It is retired by an explicit **human
-  HUD-deprecation sign-off**, not by code. The permanent correctness check is
-  `check:metrics-groundtruth`, which recounts the filesystem independently and never
-  touches `aos-hud.js`.
-- **Deliberately not compared**: the 30-day growth `series` and `last30`. The HUD keys
-  them on fs ctime; the console keys them on `pathAddedDate` (git first saw the path,
-  ADR-0003). This divergence is a design decision, not a parity failure.
-- `projects`/`workflows` are computed by the HUD but never rendered into its HTML, so
-  they can't be extracted here — `check:metrics-groundtruth` covers them.
+(`dashboards/aos-hud.js`) is **deprecated** (ADR-0002, sign-off recorded in the ADR's
+amendment). The temporary `check:hud-parity` migration gate passed its final run against
+the live repo and was **retired with the sign-off** — removed from the scripts, the
+operations catalog, and the repo. The permanent correctness check is
+`check:metrics-groundtruth`, which recounts the filesystem independently and never touches
+`aos-hud.js`. The HUD files remain in the memory repo with a visible deprecation notice
+and receive no further changes.
 
 ## Security model (Phase 1)
 

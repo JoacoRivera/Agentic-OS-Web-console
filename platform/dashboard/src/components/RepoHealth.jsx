@@ -64,11 +64,6 @@ export default function RepoHealth({ metrics }) {
       v: 'npm run check:metrics-groundtruth',
       note: 'permanent check · run locally',
     },
-    {
-      k: 'HUD parity',
-      v: 'npm run check:hud-parity',
-      note: 'migration-only · retired by human sign-off (ADR-0002)',
-    },
   ];
   return (
     <div className="panel">

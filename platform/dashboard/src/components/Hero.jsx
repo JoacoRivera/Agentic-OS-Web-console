@@ -1,6 +1,26 @@
-const SKILLS = ['/ingest', '/query-memory', '/wiki-lint', '/capture-approved-example', '/promote-draft-memory'];
+import { useEffect, useState } from 'react';
 
 export default function Hero({ status, metrics }) {
+  // Command bar lists what the skill registry actually finds — never a
+  // hardcoded (potentially phantom) list. Empty until loaded / on error.
+  const [invocations, setInvocations] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/skills');
+        if (!cancelled && res.ok) {
+          setInvocations((await res.json()).skills.map((s) => s.invocation));
+        }
+      } catch {
+        /* server offline — the ready chip already says so */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   return (
     <div className="panel hero">
       <div className="peak">⌃</div>
@@ -24,7 +44,7 @@ export default function Hero({ status, metrics }) {
         )}
       </div>
       <div className="commandbar">
-        {SKILLS.map((s) => (
+        {invocations.map((s) => (
           <span key={s} className="chip">{s}</span>
         ))}
       </div>
