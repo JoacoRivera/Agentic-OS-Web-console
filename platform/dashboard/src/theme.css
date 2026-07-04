@@ -1028,3 +1028,125 @@ svg.growth {
     max-height: none;
   }
 }
+
+/* ---- workflow registry (ADR-0006/0007) ---- */
+
+.wf-summary {
+  font-size: 11px;
+  color: var(--dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.wf-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.wf-table th {
+  text-align: left;
+  padding: 6px 8px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+}
+
+.wf-table td {
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+
+.wf-table tbody tr {
+  cursor: pointer;
+}
+
+.wf-table tbody tr:hover,
+.wf-table tbody tr.selected {
+  background: var(--panel-2);
+}
+
+.wf-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Unclassified is deliberately neutral: neither green nor a defect color. */
+.wf-status.st-ok { color: var(--green); }
+.wf-status.st-stale { color: var(--yellow); }
+.wf-status.st-unclassified { color: var(--dim); }
+.wf-status.st-needs-review { color: var(--accent-2); }
+.wf-status.st-missing-links { color: var(--accent-2); }
+
+.wf-name { color: var(--text); }
+.wf-kind { color: var(--dim); }
+.wf-failing { color: var(--accent-2); }
+.wf-mtime { color: var(--muted); font-size: 11px; }
+
+.wf-detail-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.wf-detail-title {
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.wf-checks-label {
+  margin-top: 18px;
+}
+
+.wf-checks td:first-child {
+  width: 70px;
+}
+
+.wf-check-status {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.wf-check-status.st-check-pass { color: var(--green); }
+.wf-check-status.st-check-fail { color: var(--accent-2); }
+.wf-check-status.st-check-exempt { color: var(--blue); }
+
+.wf-check-detail {
+  color: var(--dim);
+  font-size: 11px;
+}
+
+.wf-related {
+  list-style: none;
+  margin: 8px 0 14px;
+  padding: 0;
+  font-size: 12px;
+}
+
+.wf-related li {
+  padding: 3px 0;
+}
+
+.doc-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--accent-2);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}

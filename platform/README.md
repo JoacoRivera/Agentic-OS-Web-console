@@ -42,6 +42,22 @@ wiki+raw+templates+dashboards minus `_template`; **double-counts a promoted item
 ADR-0003); a 7-day `week` by mtime (`weekTotal`, `activeDays`); `recent`; `health` from
 the first `lint` entry in `wiki/log.md`; `targets` + `trend`.
 
+## Workflow registry (`GET /api/workflows`, `GET /api/workflow?path=`)
+
+Scans `wiki/workflows/**.md`, excluding `**/{examples,cases,results}/**` (related data,
+never status verdicts). Status comes from **objective defects only** (ADR-0006), first
+match wins: `Missing links > Needs review > Unclassified > Stale > OK`. A workflow without
+`workflow_kind` frontmatter is **Unclassified** — never inferred, never green (ADR-0007);
+kind-independent defects (not indexed, broken metadata, unaccepted TODO/FIXME/open
+questions) still apply and out-rank it. `workflow_kind` maps to two booleans
+(`requires_verification`, `requires_runbook_shape`); only `runbook`/`eval-suite` are
+status-distinct in P1. "Verification" means a stated validation method (`## Verification`,
+a "Manual run checklist", "Result recording", or an explicit "Verification: not
+applicable"), and `checks_exempt: [<check-id>]` opts out of a check that legitimately
+doesn't apply. Editorial niceties (examples, "when to use", related skill, usage
+reference) are informational-only. Per-workflow lookups use `?path=` — workflow paths
+contain slashes.
+
 ## Security model (Phase 1)
 
 - Loopback bind (`listen(PORT, HOST)`, default `127.0.0.1`); non-loopback `HOST`

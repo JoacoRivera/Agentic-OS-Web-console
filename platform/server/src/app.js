@@ -5,6 +5,7 @@ import express from 'express';
 import { hostOriginGuard } from './security.js';
 import { computeMetrics } from './metrics.js';
 import { buildDocsTree, readDocFile, searchDocs, findBacklinks } from './docs.js';
+import { listWorkflows, getWorkflow } from './workflows.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '../../dashboard/dist');
@@ -94,6 +95,33 @@ export function createApp(config) {
         res.status(400).json({ error: 'unsafe-path', message: err.message });
       } else {
         res.status(500).json({ error: 'docs-backlinks-failed', message: err.message });
+      }
+    }
+  });
+
+  // Workflow registry (ADR-0006/0007): objective defects only; Unclassified
+  // is first-class; precedence Missing links > Needs review > Unclassified >
+  // Stale > OK.
+  app.get('/api/workflows', async (req, res) => {
+    try {
+      res.json(await listWorkflows(config));
+    } catch (err) {
+      res.status(500).json({ error: 'workflows-failed', message: err.message });
+    }
+  });
+
+  // Per-workflow lookup by ?path= (query param, not /:id — workflow paths
+  // contain slashes).
+  app.get('/api/workflow', async (req, res) => {
+    try {
+      res.json(await getWorkflow(config, req.query.path));
+    } catch (err) {
+      if (err.name === 'PathSafetyError' || err.name === 'NotAWorkflowError') {
+        res.status(400).json({ error: 'bad-workflow-path', message: err.message });
+      } else if (err.code === 'ENOENT' || err.code === 'EISDIR') {
+        res.status(404).json({ error: 'not-found', message: 'no such workflow' });
+      } else {
+        res.status(500).json({ error: 'workflow-failed', message: err.message });
       }
     }
   });

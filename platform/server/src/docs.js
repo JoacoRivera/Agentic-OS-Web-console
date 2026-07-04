@@ -171,9 +171,9 @@ export async function searchDocs(config, query) {
 
 // Markdown inline links: capture the href up to the first whitespace or
 // closing paren (an optional "title" may follow the href).
-const MD_LINK_RE = /\[[^\]]*\]\(<?([^)\s>]+)>?(?:\s[^)]*)?\)/g;
+export const MD_LINK_RE = /\[[^\]]*\]\(<?([^)\s>]+)>?(?:\s[^)]*)?\)/g;
 // Obsidian wikilinks: [[page]], [[page#heading]], [[page|alias]].
-const WIKILINK_RE = /\[\[([^\]]+)\]\]/g;
+export const WIKILINK_RE = /\[\[([^\]]+)\]\]/g;
 // Reference-style links: a `[label]: url` definition line…
 const MD_REF_DEF_RE = /^[ \t]{0,3}\[([^\]]+)\]:[ \t]*(\S+)(?:[ \t]+.*)?$/gm;
 // …used as [text][label] (full) or [label][] (collapsed). The shortcut form
@@ -184,7 +184,7 @@ const MD_REF_USE_RE = /\[([^\]]*)\]\[([^\]]*)\]/g;
 const isExternalHref = (href) => /^[a-z][a-z0-9+.-]*:/i.test(href);
 
 /** True when `rawHref` (relative or root-relative, ±#fragment) is `target`. */
-function hrefResolvesTo(rawHref, dir, target) {
+export function hrefResolvesTo(rawHref, dir, target) {
   if (isExternalHref(rawHref)) return false;
   const href = rawHref.split('#')[0];
   if (!href) return false; // bare #anchor — self-link
