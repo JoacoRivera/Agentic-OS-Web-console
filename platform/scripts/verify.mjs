@@ -130,6 +130,18 @@ try {
       'healthStale' in (metBody.health ?? {})
   );
 
+  const tree = await req(port, { reqPath: '/api/docs/tree' });
+  record(
+    '/api/docs/tree responds 200 with roots[]',
+    tree.status === 200 && Array.isArray(JSON.parse(tree.body).roots)
+  );
+
+  const traversal = await req(port, { reqPath: '/api/docs/file?path=../../etc/passwd' });
+  record('path traversal (?path=../../etc) is rejected (400)', traversal.status === 400);
+
+  const rawGate = await req(port, { reqPath: '/api/docs/file?path=raw/anything.md' });
+  record('raw content is hidden by default (403, ADR-0005)', rawGate.status === 403);
+
   const badHost = await req(port, { headers: { Host: 'evil.example' } });
   record('non-loopback Host header is rejected (403)', badHost.status === 403);
 
