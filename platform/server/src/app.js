@@ -7,6 +7,8 @@ import { computeMetrics } from './metrics.js';
 import { buildDocsTree, readDocFile, searchDocs, findBacklinks } from './docs.js';
 import { listWorkflows, getWorkflow } from './workflows.js';
 import { listSkills } from './skills.js';
+import { listOperations } from './operations.js';
+import { readAuditTail } from './audit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '../../dashboard/dist');
@@ -135,6 +137,26 @@ export function createApp(config) {
       res.json(await listSkills(config));
     } catch (err) {
       res.status(500).json({ error: 'skills-failed', message: err.message });
+    }
+  });
+
+  // Operations catalog (ADR-0001): static and typed — guided (checklist +
+  // command preview, copy-only) or executable (P3 allowlist, described but
+  // not runnable). LLM-Skill-backed operations are always guided.
+  app.get('/api/operations', (req, res) => {
+    try {
+      res.json(listOperations());
+    } catch (err) {
+      res.status(500).json({ error: 'operations-failed', message: err.message });
+    }
+  });
+
+  // Audit tail: honestly empty until Phase 3 execution appends entries.
+  app.get('/api/audit', async (req, res) => {
+    try {
+      res.json(await readAuditTail(config));
+    } catch (err) {
+      res.status(500).json({ error: 'audit-failed', message: err.message });
     }
   });
 
