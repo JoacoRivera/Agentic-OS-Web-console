@@ -823,3 +823,208 @@ svg.growth {
 .markdown a { color: var(--accent-2); }
 .markdown hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
 .markdown img { max-width: 100%; }
+
+/* ---- docs search / backlinks / TOC / copy (slice #9) ---- */
+
+.search-box {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 10px;
+  padding: 5px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  color: var(--muted);
+}
+
+.search-box:focus-within {
+  border-color: var(--accent);
+}
+
+.search-box input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+  outline: none;
+}
+
+.search-box input::placeholder {
+  color: var(--muted);
+}
+
+.search-clear {
+  display: flex;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.search-clear:hover {
+  color: var(--accent-2);
+}
+
+.search-results {
+  margin-top: 10px;
+}
+
+.search-hit {
+  display: block;
+  width: 100%;
+  padding: 6px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-hit:hover {
+  background: var(--panel-2);
+}
+
+.search-hit-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.search-hit-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
+
+.search-snippet {
+  margin-top: 3px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.search-line {
+  color: var(--accent-2);
+  font-size: 9px;
+}
+
+.copy-cluster {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.copy-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  color: var(--muted);
+  font-family: inherit;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.copy-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent-2);
+}
+
+.copy-btn.copied {
+  border-color: var(--green);
+  color: var(--green);
+}
+
+.doc-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px;
+  gap: 18px;
+  align-items: start;
+}
+
+.doc-rail {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
+
+.doc-rail-section + .doc-rail-section {
+  margin-top: 16px;
+}
+
+.doc-rail-section .label {
+  margin-bottom: 6px;
+}
+
+.doc-rail-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: none;
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 10px;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-rail-row:hover {
+  background: var(--panel-2);
+  color: var(--accent-2);
+}
+
+.doc-rail-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.doc-rail-empty {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.doc-link-internal {
+  color: var(--accent-2);
+}
+
+.markdown :is(h1, h2, h3, h4) {
+  scroll-margin-top: 12px;
+}
+
+@media (max-width: 1100px) {
+  .doc-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .doc-rail {
+    position: static;
+    max-height: none;
+  }
+}

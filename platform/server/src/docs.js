@@ -100,6 +100,148 @@ export async function buildDocsTree(config) {
   return { roots, generatedAt: new Date().toISOString() };
 }
 
+/** Flatten every .md file across the doc roots as {path, name, source}. */
+export async function listDocFiles(config) {
+  const { roots } = await buildDocsTree(config);
+  const files = [];
+  const visit = (node) => {
+    if (node.type === 'file') files.push({ path: node.path, name: node.name, source: node.source });
+    else for (const child of node.children) visit(child);
+  };
+  for (const root of roots) visit(root);
+  return files;
+}
+
+const SEARCH_RESULT_LIMIT = 50;
+const SNIPPETS_PER_FILE = 3;
+const SNIPPET_MAX_CHARS = 200;
+
+/**
+ * Search the doc roots: filename (path substring) + content (line) matches,
+ * case-insensitive. Raw *names* are metrics-grade metadata and always
+ * searchable; raw *bodies/snippets* are gated by EXPOSE_RAW_CONTENT
+ * (ADR-0005) — while the flag is off, raw files are never content-searched
+ * and never contribute snippets.
+ */
+export async function searchDocs(config, query) {
+  const q = String(query ?? '').trim().toLowerCase();
+  if (!q) {
+    const err = new Error('query must be a non-empty string');
+    err.name = 'BadQueryError';
+    err.status = 400;
+    throw err;
+  }
+
+  const results = [];
+  let truncated = false;
+  for (const file of await listDocFiles(config)) {
+    const nameMatch = file.path.toLowerCase().includes(q);
+
+    let snippets = [];
+    let contentMatches = 0;
+    const contentSearchable = file.source !== 'raw' || config.EXPOSE_RAW_CONTENT;
+    if (contentSearchable) {
+      let text;
+      try {
+        text = await fs.readFile(path.join(config.REPO_ROOT, file.path), 'utf8');
+      } catch {
+        text = ''; // unreadable — filename match may still count
+      }
+      const lines = text.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        if (!lines[i].toLowerCase().includes(q)) continue;
+        contentMatches++;
+        if (snippets.length < SNIPPETS_PER_FILE) {
+          snippets.push({ line: i + 1, text: lines[i].trim().slice(0, SNIPPET_MAX_CHARS) });
+        }
+      }
+    }
+
+    if (!nameMatch && contentMatches === 0) continue;
+    if (results.length >= SEARCH_RESULT_LIMIT) {
+      truncated = true;
+      break;
+    }
+    results.push({ ...file, nameMatch, contentMatches, snippets });
+  }
+
+  results.sort((a, b) => Number(b.nameMatch) - Number(a.nameMatch) || a.path.localeCompare(b.path));
+  return { query: q, results, truncated, generatedAt: new Date().toISOString() };
+}
+
+// Markdown inline links: capture the href up to the first whitespace or
+// closing paren (an optional "title" may follow the href).
+const MD_LINK_RE = /\[[^\]]*\]\(<?([^)\s>]+)>?(?:\s[^)]*)?\)/g;
+// Obsidian wikilinks: [[page]], [[page#heading]], [[page|alias]].
+const WIKILINK_RE = /\[\[([^\]]+)\]\]/g;
+
+/** True when an href points outside the repo (scheme'd URL, mailto, etc.). */
+const isExternalHref = (href) => /^[a-z][a-z0-9+.-]*:/i.test(href);
+
+/**
+ * Docs that link to `relPath`, resolving the P1 link forms: relative links
+ * (against the linking file's dir), root-relative repo links, Obsidian
+ * wikilinks matched by basename (incl. [[page#heading]]), and heading
+ * anchors (file.md#section — the fragment is ignored for matching; a bare
+ * #section is a self-link, never a backlink). Raw files as backlink
+ * *sources* are gated by EXPOSE_RAW_CONTENT — which raw capture cites a doc
+ * is content-derived, not name metadata (ADR-0005).
+ */
+export async function findBacklinks(config, relPath) {
+  const abs = safeResolve(config.REPO_ROOT, relPath);
+  const target = path.relative(config.REPO_ROOT, abs).replaceAll('\\', '/');
+  const targetBase = path.posix.basename(target).replace(/\.md$/i, '').toLowerCase();
+  const files = await listDocFiles(config);
+  const basenameCounts = new Map();
+  for (const file of files) {
+    const base = path.posix.basename(file.path).replace(/\.md$/i, '').toLowerCase();
+    basenameCounts.set(base, (basenameCounts.get(base) ?? 0) + 1);
+  }
+  const targetBaseIsUnique = basenameCounts.get(targetBase) === 1;
+
+  const backlinks = [];
+  for (const file of files) {
+    if (file.path === target) continue;
+    if (file.source === 'raw' && !config.EXPOSE_RAW_CONTENT) continue;
+
+    let text;
+    try {
+      text = await fs.readFile(path.join(config.REPO_ROOT, file.path), 'utf8');
+    } catch {
+      continue;
+    }
+
+    const dir = path.posix.dirname(file.path);
+    let count = 0;
+
+    for (const [, rawHref] of text.matchAll(MD_LINK_RE)) {
+      if (isExternalHref(rawHref)) continue;
+      const href = rawHref.split('#')[0];
+      if (!href) continue; // bare #anchor — self-link
+      let decoded = href;
+      try {
+        decoded = decodeURIComponent(href);
+      } catch {
+        /* malformed escape — match on the raw form */
+      }
+      const relative = path.posix.normalize(path.posix.join(dir, decoded));
+      const rootRelative = path.posix.normalize(decoded);
+      if (relative === target || rootRelative === target) count++;
+    }
+
+    for (const [, inner] of text.matchAll(WIKILINK_RE)) {
+      const page = inner.split('|')[0].split('#')[0].trim();
+      const base = path.posix.basename(page).replace(/\.md$/i, '').toLowerCase();
+      if (targetBaseIsUnique && base && base === targetBase) count++;
+    }
+
+    if (count > 0) backlinks.push({ ...file, count });
+  }
+
+  backlinks.sort((a, b) => a.path.localeCompare(b.path));
+  return { path: target, backlinks, generatedAt: new Date().toISOString() };
+}
+
 /**
  * Read one doc: markdown + parsed frontmatter + resolved relative & absolute
  * paths (for copy actions). Throws PathSafetyError (400) on unsafe paths and
