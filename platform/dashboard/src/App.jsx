@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar.jsx';
 import OverviewView from './views/OverviewView.jsx';
 import DocsView from './views/DocsView.jsx';
 import WorkflowsView from './views/WorkflowsView.jsx';
+import SkillsView from './views/SkillsView.jsx';
 import PlaceholderView from './views/PlaceholderView.jsx';
 import ReviewQueueView from './views/ReviewQueueView.jsx';
 import SettingsView from './views/SettingsView.jsx';
@@ -68,6 +69,16 @@ export default function App() {
   } else if (sectionId === 'workflows') {
     view = (
       <WorkflowsView
+        refreshKey={manualRefreshKey}
+        onOpenDoc={(path) => {
+          setDocRequest({ path, key: Date.now() });
+          setSectionId('documentation');
+        }}
+      />
+    );
+  } else if (sectionId === 'skills') {
+    view = (
+      <SkillsView
         refreshKey={manualRefreshKey}
         onOpenDoc={(path) => {
           setDocRequest({ path, key: Date.now() });

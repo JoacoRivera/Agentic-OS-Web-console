@@ -2,6 +2,7 @@
 // app cannot exhibit (ADR-0005 bind + startup guard), plus a build check.
 // Prints pass/fail per check and exits non-zero on any failure.
 import { spawn } from 'node:child_process';
+import fs from 'node:fs/promises';
 import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
@@ -187,6 +188,35 @@ try {
   );
   const wfBad = await req(port, { reqPath: '/api/workflow?path=' + encodeURIComponent('../../etc/passwd') });
   record('workflow path traversal is rejected (400)', wfBad.status === 400);
+
+  // Skill registry (ADR-0001): the API must report exactly what the
+  // directory scan finds — verified against an independent recount of
+  // .claude/skills/*/SKILL.md, never a hardcoded count or a phantom.
+  const sk = await req(port, { reqPath: '/api/skills' });
+  const skBody = sk.status === 200 ? JSON.parse(sk.body) : {};
+  record(
+    '/api/skills responds 200 with skills[]',
+    sk.status === 200 && Array.isArray(skBody.skills)
+  );
+  const repoRoot = JSON.parse(ok.body).repoRoot;
+  const recount = [];
+  try {
+    const dirs = await fs.readdir(path.join(repoRoot, '.claude/skills'), { withFileTypes: true });
+    for (const d of dirs.filter((e) => e.isDirectory())) {
+      try {
+        await fs.stat(path.join(repoRoot, '.claude/skills', d.name, 'SKILL.md'));
+        recount.push(d.name);
+      } catch { /* no SKILL.md — not a skill */ }
+    }
+  } catch { /* no skills root — recount stays empty */ }
+  const reported = (skBody.skills ?? []).map((s) => s.name).sort();
+  record(
+    'skill registry matches an independent directory recount — no phantom skill',
+    sk.status === 200 &&
+      JSON.stringify(reported) === JSON.stringify(recount.sort()) &&
+      !reported.includes('bw2-update-memory'),
+    `${reported.length} reported / ${recount.length} on disk`
+  );
 
   const badHost = await req(port, { headers: { Host: 'evil.example' } });
   record('non-loopback Host header is rejected (403)', badHost.status === 403);
