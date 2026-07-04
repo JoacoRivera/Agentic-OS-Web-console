@@ -13,7 +13,8 @@
     "start": "node server/src/index.js",
     "test": "npm test --workspace server",
     "verify": "node scripts/verify.mjs",
-    "check:metrics-groundtruth": "node scripts/check-metrics-groundtruth.mjs"
+    "check:metrics-groundtruth": "node scripts/check-metrics-groundtruth.mjs",
+    "check:hud-parity": "node scripts/check-hud-parity.mjs"
   },
   "engines": {
     "node": ">=20"

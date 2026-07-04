@@ -38,8 +38,8 @@ export default function RepoHealth({ metrics }) {
     },
     {
       k: 'HUD parity',
-      v: 'migration-only',
-      note: 'not a permanent gate (ADR-0002)',
+      v: 'npm run check:hud-parity',
+      note: 'migration-only · retired by human sign-off (ADR-0002)',
     },
   ];
   return (
