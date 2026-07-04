@@ -1208,18 +1208,103 @@ svg.growth {
   text-underline-offset: 3px;
 }
 
-/* --- Operations & Audit (P2/P3 placeholders) --- */
+/* --- Operations (P2 guided flows) & Audit (P3 placeholder) --- */
 
-.op-checklist {
-  margin: 10px 0 4px;
-  padding-left: 22px;
+.op-progress-chip {
+  margin-left: auto;
+}
+
+.op-reset {
+  padding: 2px 8px;
+  font-size: 10px;
+}
+
+.op-progress-track {
+  height: 3px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  overflow: hidden;
+}
+
+.op-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent);
+  transition: width 0.15s ease;
+}
+
+.op-steps {
+  list-style: none;
+  margin: 8px 0 4px;
+  padding: 0;
+}
+
+.op-steps li + li {
+  margin-top: 2px;
+}
+
+.op-step {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 3px 4px;
+  border-radius: 4px;
   color: var(--dim);
   font-size: 12px;
   line-height: 1.6;
+  cursor: pointer;
 }
 
-.op-checklist li + li {
-  margin-top: 3px;
+.op-step:hover {
+  background: var(--panel-2);
+}
+
+.op-step input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.op-step.done span {
+  color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--line);
+}
+
+.op-param {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.op-param-label {
+  min-width: 120px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.op-param-input {
+  flex: 1;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+}
+
+.op-param-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.op-param-input::placeholder {
+  color: var(--muted);
 }
 
 .cmd-preview {

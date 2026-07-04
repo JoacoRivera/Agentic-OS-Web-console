@@ -28,7 +28,7 @@ export function createApp(config) {
     res.json({
       status: 'ready',
       service: 'agentic-os-web-console',
-      phase: 'P1',
+      phase: 'P2',
       host: config.HOST,
       port: config.PORT,
       repoRoot: config.REPO_ROOT,

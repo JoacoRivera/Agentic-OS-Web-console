@@ -237,6 +237,39 @@ try {
       opsBody.operations.filter((o) => o.skill).every((o) => o.type === 'guided')
   );
 
+  // Skill conformance: every skill the catalog references must exist in the
+  // live registry (the .claude/skills directory scan) and be previewed by
+  // its real /aos-* invocation — no retired or phantom names.
+  const registryNames = new Set((skBody.skills ?? []).map((s) => s.name));
+  const skillBacked = (opsBody.operations ?? []).filter((o) => o.skill);
+  record(
+    'catalog skill references exist in the live registry and previews invoke them',
+    ops.status === 200 &&
+      skillBacked.length > 0 &&
+      skillBacked.every(
+        (o) =>
+          registryNames.has(o.skill) &&
+          (o.commandPreview === `/${o.skill}` || o.commandPreview.startsWith(`/${o.skill} `))
+      ),
+    skillBacked
+      .filter((o) => !registryNames.has(o.skill))
+      .map((o) => `${o.id} → /${o.skill}`)
+      .join(', ') || undefined
+  );
+
+  // P2 guided flows: params are preview fill-ins only — guided-only, each
+  // with a matching <name> token in the command preview it substitutes into.
+  record(
+    'guided-operation params are copy-only preview fill-ins (guided-only, tokens present)',
+    ops.status === 200 &&
+      opsBody.operations.every(
+        (o) =>
+          Array.isArray(o.params) &&
+          (o.params.length === 0 || o.type === 'guided') &&
+          o.params.every((p) => o.commandPreview.includes(`<${p.name}>`))
+      )
+  );
+
   const audit = await req(port, { reqPath: '/api/audit' });
   record(
     '/api/audit responds 200 with entries[] (empty until P3 execution)',

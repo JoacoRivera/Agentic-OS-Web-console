@@ -61,15 +61,61 @@ test('executable entries are exactly the permanent allowlist plus flagged migrat
   assert.ok(!EXECUTABLE_ALLOWLIST.includes('check:hud-parity'));
 });
 
-test('no phantom skill: catalog skills are among the five real ones', async () => {
-  const REAL = ['ingest', 'query-memory', 'wiki-lint', 'capture-approved-example', 'promote-draft-memory'];
+test('params are guided-only preview fill-ins with matching <name> tokens (P2)', async () => {
+  const body = await getCatalog();
+  const withParams = body.operations.filter((op) => op.params.length > 0);
+  assert.ok(withParams.length > 0, 'some guided operations declare params');
+  for (const op of body.operations) {
+    assert.ok(Array.isArray(op.params), `${op.id} carries a params array`);
+    if (op.params.length > 0) assert.equal(op.type, 'guided', `${op.id} params must be guided-only`);
+    for (const param of op.params) {
+      assert.ok(param.name && param.label, `${op.id} param has name + label`);
+      assert.ok(
+        op.commandPreview.includes(`<${param.name}>`),
+        `${op.id} preview contains <${param.name}>`
+      );
+      if (param.options) {
+        assert.ok(Array.isArray(param.options) && param.options.length > 0);
+      }
+    }
+  }
+});
+
+test('no phantom skill: catalog skills are among the 13 real aos-* ones', async () => {
+  // The repo's skill standard: every skill is aos-*-prefixed. The verify
+  // smoke re-checks these names against the live directory scan.
+  const REAL = [
+    'aos-capture-approved-example',
+    'aos-eval',
+    'aos-hook',
+    'aos-implement',
+    'aos-ingest',
+    'aos-plan',
+    'aos-pre-commit',
+    'aos-promote-draft-memory',
+    'aos-query-memory',
+    'aos-task-mode',
+    'aos-test-wiki-lint',
+    'aos-verify-block',
+    'aos-wiki-lint',
+  ];
   const body = await getCatalog();
   for (const op of body.operations) {
     if (op.skill) assert.ok(REAL.includes(op.skill), `${op.skill} is not a real repo skill`);
   }
 });
 
-test('POST /api/operations/:id/run returns 501 in P1 (ADR-0001)', async () => {
+test('a skill-backed operation previews that skill\'s real invocation', async () => {
+  const body = await getCatalog();
+  for (const op of body.operations.filter((o) => o.skill)) {
+    assert.ok(
+      op.commandPreview === `/${op.skill}` || op.commandPreview.startsWith(`/${op.skill} `),
+      `${op.id} preview "${op.commandPreview}" must invoke /${op.skill}`
+    );
+  }
+});
+
+test('POST /api/operations/:id/run returns 501 before P3 (ADR-0001)', async () => {
   const res = await request(app)
     .post('/api/operations/check-paths/run')
     .set('Host', '127.0.0.1:3001');
@@ -77,7 +123,7 @@ test('POST /api/operations/:id/run returns 501 in P1 (ADR-0001)', async () => {
   assert.equal(res.body.error, 'not-implemented');
 });
 
-test('POST /api/operations/:id/dry-run returns 501 in P1 (ADR-0001)', async () => {
+test('POST /api/operations/:id/dry-run returns 501 before P3 (ADR-0001)', async () => {
   const res = await request(app)
     .post('/api/operations/anything/dry-run')
     .set('Host', '127.0.0.1:3001');

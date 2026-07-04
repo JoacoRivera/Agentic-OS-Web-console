@@ -7,16 +7,17 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { createConfig } from '../src/config.js';
 
-// Fixture repo with exactly the five real Skills (ADR-0001): the registry
+// Fixture repo with five of the real aos-* Skills (ADR-0001): the registry
 // must report what the directory scan finds — no more, no less, no phantom.
+// Skill names follow the repo standard: every skill is aos-*-prefixed.
 let root;
 
 const FIVE = [
-  'capture-approved-example',
-  'ingest',
-  'promote-draft-memory',
-  'query-memory',
-  'wiki-lint',
+  'aos-capture-approved-example',
+  'aos-ingest',
+  'aos-promote-draft-memory',
+  'aos-query-memory',
+  'aos-wiki-lint',
 ];
 
 before(async () => {
@@ -28,24 +29,24 @@ before(async () => {
 
   // Frontmatter description + a mention of a real workflow (guess target).
   await write(
-    '.claude/skills/ingest/SKILL.md',
-    '---\nname: ingest\ndescription: Ingest raw sources into the wiki.\n---\n\n# Ingest\n\nFollow wiki/workflows/manual-operations.md.\n'
+    '.claude/skills/aos-ingest/SKILL.md',
+    '---\nname: aos-ingest\ndescription: Ingest raw sources into the wiki.\n---\n\n# Ingest\n\nFollow wiki/workflows/manual-operations.md.\n'
   );
   // No frontmatter at all → description falls back to the first body line.
   await write(
-    '.claude/skills/query-memory/SKILL.md',
+    '.claude/skills/aos-query-memory/SKILL.md',
     '# Query Memory\n\nRead-only recall of the wiki before doing work.\n'
   );
   await write(
-    '.claude/skills/wiki-lint/SKILL.md',
+    '.claude/skills/aos-wiki-lint/SKILL.md',
     '---\ndescription: Check wiki health.\n---\n\n# Wiki Lint\n'
   );
   await write(
-    '.claude/skills/capture-approved-example/SKILL.md',
+    '.claude/skills/aos-capture-approved-example/SKILL.md',
     '---\ndescription: Capture an approved result into raw/.\n---\n\n# Capture\n'
   );
   await write(
-    '.claude/skills/promote-draft-memory/SKILL.md',
+    '.claude/skills/aos-promote-draft-memory/SKILL.md',
     '---\ndescription: Triage a draft capture.\n---\n\n# Promote\n'
   );
 
@@ -53,7 +54,7 @@ before(async () => {
   // file in the skills root, and a nested asset inside a real skill.
   await write('.claude/skills/not-a-skill/README.md', '# Not a skill\n');
   await write('.claude/skills/notes.md', 'stray file\n');
-  await write('.claude/skills/ingest/examples/sample.md', '# Sample\n');
+  await write('.claude/skills/aos-ingest/examples/sample.md', '# Sample\n');
 
   // A workflow for the related-workflow guess; its examples/ stays excluded.
   await write(
@@ -70,7 +71,7 @@ after(async () => {
 const app = () => createApp(createConfig({ REPO_ROOT: root }));
 const get = (url) => request(app()).get(url).set('Host', '127.0.0.1:3001');
 
-test('GET /api/skills returns exactly the five real Skills — no phantom', async () => {
+test('GET /api/skills returns exactly the fixture five aos-* Skills — no phantom', async () => {
   const res = await get('/api/skills');
   assert.equal(res.status, 200);
   assert.equal(res.body.total, 5);
@@ -97,9 +98,9 @@ test('each entry carries description, path, mtime, invocation, related workflow'
 test('description prefers frontmatter, falls back to the first body line', async () => {
   const res = await get('/api/skills');
   const byName = Object.fromEntries(res.body.skills.map((s) => [s.name, s]));
-  assert.equal(byName['ingest'].description, 'Ingest raw sources into the wiki.');
+  assert.equal(byName['aos-ingest'].description, 'Ingest raw sources into the wiki.');
   assert.equal(
-    byName['query-memory'].description,
+    byName['aos-query-memory'].description,
     'Read-only recall of the wiki before doing work.'
   );
 });
@@ -107,8 +108,8 @@ test('description prefers frontmatter, falls back to the first body line', async
 test('related workflow is a guess from mentions — null when nothing matches', async () => {
   const res = await get('/api/skills');
   const byName = Object.fromEntries(res.body.skills.map((s) => [s.name, s]));
-  assert.equal(byName['ingest'].relatedWorkflow, 'wiki/workflows/manual-operations.md');
-  assert.equal(byName['wiki-lint'].relatedWorkflow, null);
+  assert.equal(byName['aos-ingest'].relatedWorkflow, 'wiki/workflows/manual-operations.md');
+  assert.equal(byName['aos-wiki-lint'].relatedWorkflow, null);
 });
 
 test('a repo without a skills root yields an empty registry, not an error', async () => {

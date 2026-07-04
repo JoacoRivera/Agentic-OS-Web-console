@@ -25,7 +25,7 @@ export default function Hero({ status, metrics }) {
     <div className="panel hero">
       <div className="peak">⌃</div>
       <h1>Agentic OS</h1>
-      <div className="sub">Memory console — canonical metrics · read-only (P1)</div>
+      <div className="sub">Memory console — canonical metrics · guided ops, no execution (P2)</div>
       <div className="ready">
         <span className={`chip ${status ? 'ok' : 'warn'}`}>
           <span className="status-dot" />

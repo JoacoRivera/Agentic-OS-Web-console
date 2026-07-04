@@ -2,8 +2,9 @@ import { useEffect, useState } from 'react';
 import OperationsPanel from '../components/OperationsPanel.jsx';
 
 /**
- * Operations section (placeholder for P2 guided flows): the typed catalog
- * from /api/operations, rendered read-only — no execution path exists.
+ * Operations section (Phase 2 guided flows): the typed catalog from
+ * /api/operations, rendered as interactive checklists + copyable command
+ * previews — no execution path exists.
  */
 export default function OperationsView({ refreshKey = 0, onOpenDoc }) {
   const [data, setData] = useState(null);

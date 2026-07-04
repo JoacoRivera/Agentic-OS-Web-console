@@ -6,7 +6,7 @@ Express backend (`server/`) + React/Vite frontend (`dashboard/`), npm workspaces
 
 **This console is not safe for LAN/public exposure without auth.** The server binds
 loopback by default and refuses to start on a non-loopback `HOST` (no auth layer exists
-in Phase 1) — see ADR-0005.
+yet) — see ADR-0005.
 
 ## Commands (run from `platform/`)
 
@@ -74,7 +74,20 @@ operations catalog, and the repo. The permanent correctness check is
 `aos-hud.js`. The HUD files remain in the memory repo with a visible deprecation notice
 and receive no further changes.
 
-## Security model (Phase 1)
+## Guided operations (Phase 2, `GET /api/operations`)
+
+The Operations section renders the static catalog as **guided flows**: each guided
+operation is an interactive checklist (per-browser progress via `localStorage`, with
+reset) plus a command preview. Operations with `params` render fill-in inputs whose
+values substitute into the preview's `<name>` tokens — producing the exact text the user
+**copies and runs themselves** (in a terminal or a Claude session). Params never leave
+the browser; no endpoint accepts them. The console still executes nothing: LLM Skills
+are guided-only forever (ADR-0001), and the executable allowlist (deterministic checks
+only) stays described-but-inert until Phase 3 — `run`/`dry-run` return `501`. The catalog
+module enforces both invariants at load time, and additionally throws on a param without
+a matching preview token.
+
+## Security model (Phases 1–2)
 
 - Loopback bind (`listen(PORT, HOST)`, default `127.0.0.1`); non-loopback `HOST`
   without configured auth is **invalid configuration** — startup fails non-zero.
