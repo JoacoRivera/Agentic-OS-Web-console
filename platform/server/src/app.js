@@ -6,6 +6,7 @@ import { hostOriginGuard } from './security.js';
 import { computeMetrics } from './metrics.js';
 import { buildDocsTree, readDocFile, searchDocs, findBacklinks } from './docs.js';
 import { listWorkflows, getWorkflow } from './workflows.js';
+import { listSkills } from './skills.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '../../dashboard/dist');
@@ -123,6 +124,17 @@ export function createApp(config) {
       } else {
         res.status(500).json({ error: 'workflow-failed', message: err.message });
       }
+    }
+  });
+
+  // Skill registry (ADR-0001): a directory scan of .claude/skills — reports
+  // exactly what exists (never a phantom); Skills are copy-invocation only,
+  // never console-executable.
+  app.get('/api/skills', async (req, res) => {
+    try {
+      res.json(await listSkills(config));
+    } catch (err) {
+      res.status(500).json({ error: 'skills-failed', message: err.message });
     }
   });
 

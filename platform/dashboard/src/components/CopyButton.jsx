@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 
-function CopyButton({ label, value }) {
+export function CopyButton({ label, value }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef(null);
 

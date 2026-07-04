@@ -260,7 +260,7 @@ function evaluateWorkflow(config, ctx, relPath, text, stat, now) {
 }
 
 /** Walk wiki/workflows collecting {workflowPaths, exampleDirs, relatedByDir}. */
-async function scanWorkflowsRoot(config) {
+export async function scanWorkflowsRoot(config) {
   const workflowPaths = [];
   const exampleDirs = new Set();
   const relatedFiles = []; // files inside excluded dirs, as related data

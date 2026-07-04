@@ -1140,6 +1140,63 @@ svg.growth {
   padding: 3px 0;
 }
 
+/* ---- skill registry (ADR-0001: describe, never execute) ---- */
+
+.skill-notice {
+  margin-bottom: 14px;
+}
+
+.skill-card {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+}
+
+.skill-card + .skill-card {
+  margin-top: 10px;
+}
+
+.skill-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.skill-name {
+  color: var(--text);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.skill-invocation {
+  color: var(--accent-2);
+  font-size: 12px;
+}
+
+.skill-mtime {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.skill-desc {
+  margin-top: 8px;
+  color: var(--dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.skill-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin: 8px 0 4px;
+  font-size: 11px;
+}
+
 .doc-link {
   background: none;
   border: none;
