@@ -1,0 +1,19 @@
+{
+  "name": "@agentic-os/console-server",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Express backend for the Agentic OS web console (loopback-only, ADR-0005)",
+  "type": "module",
+  "main": "src/app.js",
+  "scripts": {
+    "dev": "node --watch src/index.js",
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "devDependencies": {
+    "supertest": "^7.1.0"
+  }
+}

@@ -8,13 +8,17 @@ operated by an LLM harness, plus the tooling and consoles built around it.
 ### Memory model
 
 **Wiki**:
-The polished, verified long-term memory under `wiki/`. The canonical knowledge base.
+The polished, verified long-term memory under `wiki/`. The canonical, synthesized,
+**published** tier — its count (`wikiN`) is the headline "Published memory" stat.
 _Avoid_: docs (too generic), knowledge base
 
 **Raw capture**:
-An unverified source file under `raw/`. May be a draft, a project snapshot, or notes,
-not yet ingested into the `wiki/`.
-_Avoid_: note, doc
+An unverified source file under `raw/`. May be a draft, a project snapshot, or notes.
+`raw/` is **append-only evidence/archive**: promotion *copies* a capture into `wiki/` and
+**keeps** the raw original, so `rawN` only ever grows — it is a source archive, **not** a
+backlog that drains. `raw/` and `wiki/` are two independent monotonic stores, not stages of
+a pipeline; there is no raw→wiki funnel.
+_Avoid_: note, doc, treating rawN as unprocessed backlog, raw→wiki burndown framing
 
 ### Metrics
 
@@ -24,11 +28,20 @@ The Obsidian HUD (`dashboards/`) is a **migration reference only**, not a long-t
 it is deprecated once the web console is trusted.
 _Avoid_: "both dashboards are authoritative" (false), HUD-as-source-of-truth
 
-**Metrics parity check**:
-`check:metrics-parity` — a **temporary migration gate** comparing web-console output
-against the existing HUD definitions/expected counts. It exists to validate the migration,
-not as a permanent two-runtime guarantee. Retired (or relaxed) once the HUD is deprecated.
-_Avoid_: treating parity as a permanent invariant
+**check:metrics-groundtruth**:
+The **permanent** executable check that compares `/api/metrics` against an *independent
+filesystem recount* (the same skip/count rules, recomputed directly). The filesystem is the
+permanent source of truth, so this check is permanent and in the Phase-3 allowlist. It must
+**not** depend on `dashboards/aos-hud.js`. (Renamed from the old `check:metrics-parity`,
+which conflated ground-truth correctness with HUD migration — ADR-0002.)
+_Avoid_: check:metrics-parity (conflated name), making it depend on the HUD
+
+**check:hud-parity**:
+The **temporary migration gate** comparing the web console against the Obsidian HUD *during
+migration only*. The HUD is a migration **oracle**, not a peer. Outside the permanent
+allowlist (or flagged `migrationOnly: true`). Retired by an explicit human HUD-deprecation
+sign-off once `check:metrics-groundtruth` is green and the console is canonical (ADR-0002).
+_Avoid_: treating HUD parity as a permanent invariant or putting it in the permanent allowlist
 
 ### Memory lineage dates
 
@@ -60,9 +73,19 @@ _Avoid_: treating it as a hostable/shared service
 
 **Sensitive read APIs**:
 `/api/docs/file` and `/api/docs/search` expose raw `wiki/` and `raw/` memory **contents**
-(not just metrics). They are sensitive by definition. `raw/` is candid/unreviewed memory —
-treat as sensitive; gated by `EXPOSE_RAW` (default true only on loopback).
-_Avoid_: assuming path-safety alone makes these endpoints safe to expose
+(not just metrics). They are sensitive by definition. `raw/` is candid/unreviewed memory and
+may hold NDA-grade client material — treat as sensitive. `raw/` **content** exposure is gated
+by `EXPOSE_RAW_CONTENT` (default **false**); raw *metrics* (counts/dates/health) are always
+computed internally regardless. Loopback bind alone is insufficient — the API also enforces
+Host/Origin checks against DNS rebinding (ADR-0005).
+_Avoid_: assuming path-safety or loopback alone makes these endpoints safe to expose;
+conflating raw metrics with raw content exposure
+
+**EXPOSE_RAW_CONTENT**:
+The single opt-in flag that gates raw **content** over HTTP (`/api/docs/file` for `raw/**`,
+raw bodies/snippets in search, raw markdown preview). Default `false`. It gates content only,
+never metrics. (Renamed from `EXPOSE_RAW` to remove the metrics-vs-content ambiguity.)
+_Avoid_: EXPOSE_RAW (ambiguous — sounds like it gates raw metrics too)
 
 ## Principles
 
@@ -95,13 +118,26 @@ _Avoid_: operation, runbook (use "Workflow"), process
 **workflow_kind**:
 The type of a workflow, declared in frontmatter, selecting its required checks:
 `runbook | reference | style-guide | policy | inventory | eval-suite`. A style-guide (e.g.
-`german-technical-emails`) is not held to a runbook's shape.
-_Avoid_: one-size-fits-all workflow shape
+`german-technical-emails`) is not held to a runbook's shape. **There is no default kind** —
+absence is not "assume `reference`". A file with no `workflow_kind` is **Unclassified**
+(below); the kind is never inferred from title, tags, or filename (ADR-0007).
+_Avoid_: one-size-fits-all workflow shape, inferring the kind, defaulting to reference
+
+**Unclassified**:
+The Workflow Registry status of a workflow that has no `workflow_kind` frontmatter: the
+console **cannot judge** its kind-dependent checks, so it is neither `OK` nor a defect color.
+Kind-*independent* objective defects (e.g. not linked from `index.md`) still apply and
+out-rank it; a structurally clean but un-annotated file shows `Unclassified`, never `OK`
+(ADR-0007). The console may *suggest* a likely kind but status logic must not act on the
+suggestion.
+_Avoid_: defaulting unclassified rows to OK or to reference
 
 **Objective defect vs. editorial nicety**:
 A registry **status-impacting** check flags a genuine defect (not indexed in `index.md`;
 broken/unsafe metadata; unaccepted TODO/FIXME; missing verification *only* where the kind
-expects it). An **informational-only** check surfaces editorial metadata (has examples /
+expects it — where "verification" means a **stated method for validating/running** the
+workflow, e.g. a `## Verification`, "Manual run checklist", or "Result recording" section,
+**not** a magic heading; an explicit "Verification: not applicable" satisfies it). An **informational-only** check surfaces editorial metadata (has examples /
 "when to use" / related skill) without turning the row yellow. `checks_exempt` in
 frontmatter opts a workflow out of a check that legitimately doesn't apply.
 _Avoid_: treating editorial niceties as defects
@@ -118,10 +154,12 @@ _Avoid_: command, action (use "Operation"), task
 ### Hosting
 
 **Platform Apps (static hosting)**:
-The Phase-1 capability: scan `platform/apps/*/dist`, `express.static`-mount each at
-`/apps/<name>`. Serves **built frontends only** (React/Angular/Vite `dist/`). "Host" here
-means *serve static builds*.
-_Avoid_: PaaS, app hosting (implies backends), deploy
+Scanning `platform/apps/*/dist` and `express.static`-mounting each at `/apps/<name>`. Serves
+**built frontends only** (React/Angular/Vite `dist/`). "Host" here means *serve static
+builds*. **Deferred out of P1** (ADR-0004): same-origin hosting would grant a hosted bundle
+ambient read access to `/api/*`, bypassing the ADR-0005 Origin defense. When it returns it
+must be **separate-origin** with explicit per-app API grants.
+_Avoid_: PaaS, app hosting (implies backends), deploy, treating it as a P1 feature
 
 **Local app supervisor**:
 The deferred, separately-scoped future product that would run live **backend** services

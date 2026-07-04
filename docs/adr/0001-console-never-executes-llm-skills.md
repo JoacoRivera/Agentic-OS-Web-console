@@ -13,9 +13,14 @@ arbitrary shell, no hidden LLM invocation from a browser-triggered action).
 
 ## Consequences
 
-- Phase-3 executable allowlist is restricted to deterministic checks/scripts:
+- **Permanent** Phase-3 executable allowlist (deterministic checks/scripts only):
   `npm run verify`, `check:paths`, `check:docs`, `check:workflows`, `check:skills`,
-  `check:metrics-parity`.
+  `check:metrics-groundtruth`.
+- **Migration gates** are a *separate* bucket, **not** part of the permanent allowlist:
+  `check:hud-parity` (temporary; compares console vs. the Obsidian HUD during migration
+  only). If it lives near the allowlist in code it must be flagged `migrationOnly: true` so
+  it is never mistaken for a permanent member. The permanent allowlist must not depend on
+  `dashboards/aos-hud.js`. See ADR-0002 for the parity split and retirement.
 - `aos:ingest`, `aos:promote-draft`, `aos:capture-example` are removed from the executable
   allowlist unless separate deterministic tools are later designed.
 - `/wiki-lint` splits into two concepts: the LLM skill (Guided Operation) and a future

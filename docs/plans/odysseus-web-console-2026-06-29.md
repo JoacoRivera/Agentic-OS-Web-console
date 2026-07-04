@@ -21,12 +21,14 @@ filesystem — as the canonical implementation — (2) adopt the **Odysseus** vi
 (reference image
 `pewdiepie-archdaemon/odysseus/docs/odysseus-browser.jpg`: dark slate bg, left **sidebar
 nav**, **monospace** type, muted **coral/rose accent** `~#e08a8a`, small status dots,
-rounded panels with 1px borders), and (3) run on a **live Node/Express server** that, in
-Phase 1, doubles as a **static frontend launcher** for the user's future built
-React/Angular/Vite apps. **"Host" here means serve static `dist/` builds — it does not run
-Node/Nest backend processes.** Backend/Nest hosting is explicitly out of scope and deferred
-to a separate future "local app supervisor" project with its own process model and security
-review (see ADR-0004).
+rounded panels with 1px borders), and (3) run on a **live Node/Express server**. A future
+**static frontend launcher** for the user's built React/Angular/Vite apps was considered, but
+**"Platform Apps" is deferred out of P1**: same-origin static hosting would grant any hosted
+bundle ambient read access to `/api/*`, bypassing the loopback/Origin defenses (ADR-0004 ×
+ADR-0005). **"Host" would mean serve static `dist/` builds — never run Node/Nest backend
+processes**; backend hosting is out of scope and deferred to a separate future "local app
+supervisor" product with its own process model and security review. When app hosting returns
+it must be **separate-origin** (see ADR-0004).
 
 Beyond metrics, the goal is an **operating console** for the Agentic OS: browse the docs,
 check workflows/skills for completeness, and run guided operations — not just a pretty HUD.
@@ -107,22 +109,30 @@ paths, and anything outside repo root; restrict reads to `wiki/ raw/ templates/ 
 `config.js` is the single source for tunable thresholds/limits (kept separate because
 workflow staleness differs from memory-lint health):
 `LINT_STALE_DAYS = 7`, `WORKFLOW_STALE_DAYS = 90`, `RECENT_ACTIVITY_LIMIT = 6`,
-`DRAFT_LIMIT = 6`, `PORT = 3001`, `HOST = '127.0.0.1'`, `EXPOSE_RAW = true`,
+`DRAFT_LIMIT = 6`, `PORT = 3001`, `HOST = '127.0.0.1'`, `EXPOSE_RAW_CONTENT = false`,
 `REFRESH_MS = 30000`. `metrics.js` reads `LINT_STALE_DAYS`/limits from here instead of
-inlining `STALE_DAYS=7`.
+inlining `STALE_DAYS=7`. (`EXPOSE_RAW_CONTENT` gates raw **content** exposure only, default
+off; raw metrics are always computed — ADR-0005.)
 
 **Bind & exposure invariants (ADR-0005).** The server calls `listen(PORT, HOST)` and
 defaults to loopback (`127.0.0.1`). If `HOST` is **not** loopback (`127.0.0.1` / `localhost`
 / `::1`) and no auth layer is configured, the server **refuses to start** — non-localhost
-without auth is invalid configuration, not a "recommended later" reminder. `EXPOSE_RAW`
-gates `raw/` content (the candid/unreviewed tier) through the read APIs; it defaults `true`
-only on loopback. If non-loopback hosting is ever enabled, `raw/` defaults to hidden unless
-auth **and** explicit `EXPOSE_RAW=true` are both set.
+without auth is invalid configuration, not a "recommended later" reminder. **Loopback bind
+is necessary but insufficient:** the API also validates the `Host` header against allowed
+loopback hosts (`127.0.0.1:<port>` / `localhost:<port>` / `[::1]:<port>`) and rejects
+non-localhost `Origin`s, with no permissive CORS — a DNS-rebinding defense that protects
+`wiki/` and `raw/` alike. `EXPOSE_RAW_CONTENT` (default **false**) gates only raw **content**
+exposure (`/api/docs/file` for `raw/**`, raw bodies/snippets in search, raw markdown preview);
+raw **metrics** are always computed internally. If non-loopback hosting is ever enabled, raw
+content stays hidden unless auth **and** explicit `EXPOSE_RAW_CONTENT=true` are both set.
 
 ### APIs
 - `GET /api/metrics` — ports the exact definitions from `dashboards/aos-hud.js`:
   - `skip` basenames `index|log|_template|README`, drop `.gitkeep`.
-  - `wikiN`, `rawN`, `all` (wiki+raw+templates+dashboards minus `_template`), `examples`,
+  - `wikiN` (published-memory page count — **the headline stat**), `rawN` (append-only raw
+    source-archive count, **not** a backlog), `all` (wiki+raw+templates+dashboards minus
+    `_template` — total *files* across tiers; **double-counts a promoted item** as both raw
+    source and wiki synthesis, so never label it "total memory" — ADR-0003), `examples`,
     `projects` (`wiki/projects`), `workflows` (`wiki/workflows` non-example), `rawProj`,
     `rawFlow`.
   - **captures** (raw files under `examples/`): approved iff body matches the HUD regex
@@ -207,24 +217,36 @@ session-close step present, 7-day cadence present, `/promote-draft-memory` cited
 `agentic-os-usage.md`, `manual-operations.md` links the relevant skills, task-modes
 indexed.
 
-### Live reads / caching
-Phase 1 uses **live filesystem reads**. The only expensive part is the per-request
-`git log --diff-filter=A` pass in `gitdates.js`; plain `fs.stat` scans over ~90 files are
-negligible and stay live. An **optional in-memory TTL cache** is allowed **only** for the
-expensive aggregate endpoints (`/api/metrics`, `/api/workflows`) — short TTL (~5–30s, ≤
-`REFRESH_MS`) so the 30s poll doesn't re-run `git log` twice a minute for an idle tab. The
-manual **Refresh** button **bypasses the cache** (e.g. `?fresh=1`) so a change you just made
-(e.g. an ingest) is visible immediately — refresh must never be a no-op. **Individual doc
-reads (`/api/docs/file`) stay live.** No persistent cache, no file watcher, no background
-indexer.
+### Live reads (no cache in P1)
+Phase 1 uses **live filesystem reads** — and that is the whole promise: live reads mean live
+reads. **No cache, no TTL, no `?fresh=1`, no special Refresh semantics.** Refresh is simply
+"fetch again". This is justified by measurement, not assumption: at the current repo size
+(~105 tracked files) the per-request `git log --diff-filter=A` pass in `gitdates.js` is
+**~30ms cold / ~0ms warm**, and the `fs.stat` scans are negligible. A TTL cache would trade
+that unmeasurable saving for real liability — stale UI after an ingest, a `?fresh=1` bypass
+path, cache keys — so it is **cut from P1**. The multi-tab / StrictMode-double-fetch /
+multi-panel cases are runtime noise, not product requirements; one fetch per aggregate view,
+no caveat. No persistent cache, no file watcher, no background indexer.
 
-### Static hosting / platform hook
-Serve `dashboard/dist` at `/` in prod. On boot, scan `platform/apps/*/dist` and
-`express.static`-mount each at `/apps/<name>` — the extension point for the user's future
-**built React/Angular/Vite frontends** (static `dist/` only). **This does not host
-Node/Nest backend processes** (no spawn/supervise/port/proxy/health/lifecycle); that is a
-separate deferred "local app supervisor" product with its own security review (ADR-0004).
-Single port (`PORT`, default `3001`), bound to `HOST` (loopback by default).
+**Tripwire (not a P1 feature):** if aggregate-endpoint latency ever becomes measurable —
+e.g. p95 of `/api/metrics` or `/api/workflows` exceeds ~250ms on a representative repo — add
+caching *then*, behind an explicit **change-key invalidation** design (key results off a
+cheap repo fingerprint: max mtime + file count across scanned roots, plus `HEAD` for
+git-derived dates), **never** a blind TTL. Only after a real number justifies it.
+
+### Static hosting / platform hook (deferred out of P1)
+P1 serves only `dashboard/dist` at `/` in prod, single port (`PORT`, default `3001`), bound
+to `HOST` (loopback by default). **Platform Apps is NOT in P1** — no `platform/apps/*/dist`
+scan, no `/apps/<name>` mounts. Reason: those mounts would be **same-origin** with `/api/*`,
+so any hosted bundle (and its npm supply chain) would inherit ambient read access to the
+memory API, defeating the ADR-0005 Origin defense (ADR-0004 × ADR-0005).
+
+When app hosting returns it must be **separate-origin by design**: a distinct port (or
+loopback host); no same-origin access to `/api/*`; the API denies app origins by default;
+per-app opt-in CORS or token-scoped grants only when a specific app needs memory data; and an
+explicit warning that hosted bundles are executable frontend code with supply-chain risk. It
+still serves **static `dist/` only** — never Node/Nest backend processes (that remains the
+separate deferred "local app supervisor" product) (ADR-0004).
 
 ## Frontend — `platform/dashboard` (React + Vite, Odysseus style)
 
@@ -238,17 +260,22 @@ uppercase letter-spaced labels; ~10px radii; 1px `--line` borders; glowing statu
 
 **Sidebar** (Odysseus left nav, lucide icons, inline status chips like Odysseus's
 `idle ●`): Overview · Documentation · Workflows · Skills · Review Queue · Memory Health ·
-Activity · Operations · Audit Log · Platform Apps · Settings. The `HEALTH · DUE` and
+Activity · Operations · Audit Log · Settings. (**Platform Apps is deferred out of P1** —
+ADR-0004 — so it is not a P1 sidebar entry.) The `HEALTH · DUE` and
 `N DRAFT` chips turn coral when stale / drafts > 0.
 
 **Sections / components:**
 - **Overview** — `RepoHealth` (one diagnostic card: Docs OK/Needs-review · Workflows
-  `N OK / N needs review` · Skills `N found` · Draft captures `N` · Lint age `N days` ·
-  Obsidian HUD parity `unchecked`), then `Hero` (coral peak + "Agentic OS", subtitle,
-  `READY · <ts>`, an Odysseus-style command bar listing the **five real skills**
+  `N OK / N needs review / N unclassified` · Skills `N found` · Draft captures `N` · Lint age
+  `N days` · metrics ground-truth `pass/fail` · HUD parity `migration-only`), then `Hero`
+  (coral peak + "Agentic OS", subtitle, `READY · <ts>`, an Odysseus-style command bar listing
+  the **five real skills**
   `/ingest /query-memory /wiki-lint /capture-approved-example /promote-draft-memory`),
-  `StatCards` (3 gauge cards, 26-segment gauge + `target()`), `GrowthChart` (port the HUD
-  SVG, recolored coral), `HealthPanel`, `ReviewQueue`, `RecentActivity`, `WeekBars`,
+  `StatCards` (3 gauge cards, 26-segment gauge + `target()`: **Published memory** (`wikiN`,
+  headline) · **Raw capture archive** (`rawN`, append-only — labeled as archive, not backlog)
+  · a third file/health gauge — **no raw→wiki funnel framing**; raw and wiki are independent
+  monotonic stores, ADR-0003), `GrowthChart` ("Repository file growth"; port the HUD SVG,
+  recolored coral), `HealthPanel`, `ReviewQueue`, `RecentActivity`, `WeekBars`,
   `Integrations`.
 - **Documentation** — `DocsExplorer` file tree (AGENTS.md, wiki/, raw/, templates/,
   dashboards/, .claude/skills/), **grouped/badged by source kind** — Wiki, Raw, Templates,
@@ -275,8 +302,9 @@ Every doc / workflow / skill page exposes a `CopyButton` cluster — **Copy rela
   picker, pre/post-edit checklists, memory-update, draft-review, wiki-lint, session-close)
   rendered as checklists + `CommandPreview` (exact command, copy button — **no run** yet).
 - **Audit Log** (P3) — `AuditLog` reads `/api/audit`.
-- **Platform Apps** — lists mounted `/apps/<name>`. **Settings** — port, refresh interval,
-  theme note.
+- **Platform Apps** — **deferred out of P1** (ADR-0004): same-origin hosting would grant
+  hosted bundles ambient `/api/*` access; returns only as a separate-origin design.
+  **Settings** — port, refresh interval, theme note.
 
 `App.jsx` fetches the relevant API per section, with a manual refresh + optional 30s poll.
 `vite.config.js` proxies `/api` → `:3001` in dev; builds to `dist/`.
@@ -287,9 +315,13 @@ Every doc / workflow / skill page exposes a `CopyButton` cluster — **Copy rela
 - Every write/exec: **dry-run first**, explicit **confirm**, then run.
 - Show `stdout`/`stderr`, changed files, and `git diff` before final apply where relevant.
 - Append an audit entry (op, ts, status, files, output) to `platform/logs/operations.log`.
-- **Executable allowlist (wired only in P3) — deterministic checks/scripts only:**
+- **Permanent executable allowlist (wired only in P3) — deterministic checks/scripts only:**
   `npm run verify`, `check:paths`, `check:docs`, `check:workflows`, `check:skills`,
-  `check:metrics-parity`. No generic terminal.
+  `check:metrics-groundtruth` (console metrics vs. an **independent filesystem recount**; no
+  dependence on `aos-hud.js`). No generic terminal.
+- **Migration gates (separate bucket, NOT in the permanent allowlist):** `check:hud-parity`
+  (console vs. the Obsidian HUD, migration only; flag `migrationOnly: true` if co-located).
+  Retired by an explicit human HUD-deprecation sign-off (ADR-0002).
 - **NOT executable.** LLM Skills (`/ingest`, `/promote-draft-memory`,
   `/capture-approved-example`, `/query-memory`) are removed from the allowlist — they need
   LLM judgment and remain **Guided Operations** only. `/wiki-lint` (LLM, guided) is split
@@ -319,11 +351,13 @@ Performed during implementation:
 1. `cd platform && npm install` completes; `npm run build` succeeds; `npm start` serves
    UI + API on `:3001`; `npm run dev` hot-reloads with `/api` proxy.
 2. `curl -s localhost:3001/api/metrics | jq` returns the documented fields.
-3. **Metric parity (temporary migration gate)** vs the Obsidian HUD: `wikiN` =
-   `find wiki -name '*.md'` minus index/log/_template/README; `rawN` likewise;
-   `healthStale`/`lintAge` match the top `lint` entry date in `wiki/log.md`. This validates
-   migration to the canonical console — it is **not** a permanent two-runtime invariant and
-   is retired/relaxed once the HUD is deprecated (ADR-0002).
+3. **Metrics ground-truth (`check:metrics-groundtruth`, permanent)** — console output vs an
+   **independent filesystem recount**, not the HUD: `wikiN` = `find wiki -name '*.md'` minus
+   index/log/_template/README; `rawN` likewise; `healthStale`/`lintAge` match the top `lint`
+   entry date in `wiki/log.md`. This is a permanent correctness check and must not depend on
+   `aos-hud.js`. **Separately, `check:hud-parity` (temporary migration gate)** compares the
+   console against the Obsidian HUD during migration only; it is **not** a permanent invariant
+   and is retired by an explicit human HUD-deprecation sign-off (ADR-0002).
 4. **Docs**: tree loads `AGENTS.md`, `wiki/index.md`, `wiki/log.md`,
    `wiki/agentic-os-usage.md`, `wiki/workflows/`; viewer renders headings/code/lists/
    links/frontmatter; search finds `ingest`, `query-memory`, `wiki-lint`,
@@ -339,17 +373,20 @@ Performed during implementation:
 7. **Safety**: no arbitrary-shell endpoint exists; `POST /api/operations/*` returns 501
    until P3; path traversal (`..`, absolute) is rejected by `paths.safeResolve`.
    **Loopback bind**: server is bound to `127.0.0.1` only (not `0.0.0.0`); a non-loopback
-   `HOST` without configured auth **fails startup**; `raw/` exposure follows `EXPOSE_RAW`
-   (default true only on loopback) (ADR-0005).
+   `HOST` without configured auth **fails startup**. **Host/Origin defense**: a non-loopback
+   `Host` header is rejected and cross-origin `Origin`s are refused (DNS-rebinding defense; no
+   permissive CORS). **Raw content** is hidden by default — raw metrics work, but `raw/`
+   bodies/search/preview appear only with `EXPOSE_RAW_CONTENT=true` (ADR-0005).
 8. Existing Obsidian dashboard (`dashboards/`) is byte-for-byte unchanged and still opens
    in Obsidian (it is now a deprecation target, not an actively maintained peer).
 
 A lightweight **`npm run verify`** script (`platform/scripts/verify.mjs`, added in P1)
 boots the server and asserts: server bound to loopback (`127.0.0.1`) only; non-loopback
 `HOST` without auth fails startup; `/api/metrics` responds; `/api/docs/tree` responds;
-`/api/skills` returns exactly 5; path traversal (`?path=../../etc`) is rejected; `raw/`
-exposure follows `EXPOSE_RAW`; `POST /api/operations/:id/run` returns 501 before P3; and
-`npm run build` succeeds. It prints pass/fail per check and exits non-zero on any failure
+`/api/skills` returns exactly 5; path traversal (`?path=../../etc`) is rejected; a
+non-loopback `Host` header and a cross-origin `Origin` are both rejected; raw metrics work
+while raw content is hidden by default and appears only with `EXPOSE_RAW_CONTENT=true`;
+`POST /api/operations/:id/run` returns 501 before P3; and `npm run build` succeeds. It prints pass/fail per check and exits non-zero on any failure
 (CI-ready, but run manually for now to fit the repo's "not yet automated" stage).
 
 Recommended (human): visual fidelity pass against the Odysseus reference; decide whether/
