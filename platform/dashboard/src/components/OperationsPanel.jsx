@@ -7,7 +7,7 @@ import ExecutableOperationCard from './ExecutableOperationCard.jsx';
  * (never run). Executable operations are the Phase-3 deterministic allowlist,
  * live behind dry-run → explicit confirm → audited run.
  */
-export default function OperationsPanel({ data, onOpenDoc }) {
+export default function OperationsPanel({ data, lastRuns = {}, onOpenDoc }) {
   const { operations, counts, note } = data;
   const guided = operations.filter((op) => op.type === 'guided');
   const executable = operations.filter((op) => op.type === 'executable');
@@ -32,7 +32,7 @@ export default function OperationsPanel({ data, onOpenDoc }) {
           first, explicitly confirmed, one at a time, and appended to the audit log.
         </div>
         {executable.map((op) => (
-          <ExecutableOperationCard key={op.id} op={op} />
+          <ExecutableOperationCard key={op.id} op={op} lastRun={lastRuns[op.id]} />
         ))}
       </div>
     </>

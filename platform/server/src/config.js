@@ -28,6 +28,11 @@ export function createConfig(env = process.env) {
     AUDIT_LOG_PATH: env.AUDIT_LOG_PATH
       ? path.resolve(env.AUDIT_LOG_PATH)
       : path.resolve(__dirname, '../../logs/operations.log'),
+    // Size-based rollover: when the live log reaches ROTATE_BYTES it becomes
+    // .1 (older files shift up, the oldest beyond ROTATE_KEEP is dropped).
+    // Rotation renames whole files only — appended lines are never rewritten.
+    AUDIT_ROTATE_BYTES: Number(env.AUDIT_ROTATE_BYTES ?? 1_000_000),
+    AUDIT_ROTATE_KEEP: Number(env.AUDIT_ROTATE_KEEP ?? 3),
     // Gates raw *content* over HTTP only; raw metrics are always computed (ADR-0005).
     EXPOSE_RAW_CONTENT: env.EXPOSE_RAW_CONTENT === 'true',
     // No auth layer exists in Phase 1; this stays false until one is designed.

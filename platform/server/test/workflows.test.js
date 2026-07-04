@@ -203,3 +203,29 @@ test('GET /api/workflow rejects traversal, non-workflow, and excluded-data paths
   const missing = await get('/api/workflow?path=' + encodeURIComponent('wiki/workflows/nope.md'));
   assert.equal(missing.status, 404);
 });
+
+test('failing objective checks carry fix hints; unclassified rows carry the kind hint (§4.4)', async () => {
+  const app = createApp(createConfig({ REPO_ROOT: root }));
+  const res = await request(app).get('/api/workflows').set('Host', '127.0.0.1:3001');
+  assert.equal(res.status, 200);
+  const byPath = Object.fromEntries(res.body.workflows.map((w) => [w.path, w]));
+
+  // bad-runbook fails verification → that check has a hint; passing checks do not.
+  const bad = byPath['wiki/workflows/bad-runbook.md'];
+  const verification = bad.checks.find((c) => c.id === 'verification');
+  assert.equal(verification.status, 'fail');
+  assert.ok(verification.fixHint && verification.fixHint.length > 0);
+  for (const c of bad.checks.filter((x) => x.status !== 'fail')) {
+    assert.equal(c.fixHint, undefined, `${c.id} must not carry a hint unless failing`);
+  }
+
+  // A clean un-annotated workflow gets the workflow-level classification hint.
+  const plain = byPath['wiki/workflows/plain.md'];
+  assert.equal(plain.status, 'unclassified');
+  assert.match(plain.fixHint, /workflow_kind/);
+
+  // A clean classified workflow carries no hint anywhere.
+  const good = byPath['wiki/workflows/good-runbook.md'];
+  assert.equal(good.fixHint, undefined);
+  assert.ok(good.checks.every((c) => c.fixHint === undefined));
+});

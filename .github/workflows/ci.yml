@@ -1,0 +1,28 @@
+# CI runs the repo-independent subset only (plan: post-P3 roadmap §4.1).
+# The tests own their fixtures and check:paths is a pure table test; the
+# live-repo checks (check:docs/workflows/skills/metrics-groundtruth, full
+# verify) need the Agentic OS memory repo and stay local/manual.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  console:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: platform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22 # engines requires >=22.9 (--env-file-if-exists)
+          cache: npm
+          cache-dependency-path: platform/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run check:paths
+      - run: npm run build

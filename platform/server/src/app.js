@@ -178,11 +178,59 @@ export function createApp(config, { executor = createExecutor(config) } = {}) {
       sendExecError(res, err);
     }
   });
-  app.post('/api/operations/:id/run', async (req, res) => {
+  // Run starts a job and answers 202 immediately (roadmap §4.2); progress
+  // via the snapshot and SSE routes below. Validation is unchanged and
+  // still synchronous — nothing executes on a refused request.
+  app.post('/api/operations/:id/run', (req, res) => {
     try {
-      res.json(await executor.run(req.params.id, req.body ?? {}));
+      res.status(202).json(executor.run(req.params.id, req.body ?? {}));
     } catch (err) {
       sendExecError(res, err);
+    }
+  });
+
+  app.get('/api/operations/runs/:runId', (req, res) => {
+    const run = executor.getRun(req.params.runId);
+    if (!run) res.status(404).json({ error: 'no-such-run' });
+    else res.json(run);
+  });
+
+  // SSE stream for one run: first the current snapshot, then live output
+  // chunks, then the final snapshot. Same-origin only — it sits behind the
+  // same Host/Origin guard as every /api route.
+  app.get('/api/operations/runs/:runId/events', (req, res) => {
+    const run = executor.getRun(req.params.runId);
+    if (!run) {
+      res.status(404).json({ error: 'no-such-run' });
+      return;
+    }
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    });
+    const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    send('snapshot', run);
+    if (run.status !== 'running') {
+      send('done', run);
+      res.end();
+      return;
+    }
+    const unsubscribe = executor.subscribe(req.params.runId, (event) => {
+      if (event.type === 'output') send('output', { stream: event.stream, chunk: event.chunk });
+      if (event.type === 'done') {
+        send('done', event.snapshot);
+        res.end();
+      }
+    });
+    req.on('close', unsubscribe);
+    // The job may have finished between the snapshot and the subscribe —
+    // re-check so the client never waits on a 'done' that already happened.
+    const now = executor.getRun(req.params.runId);
+    if (now && now.status !== 'running') {
+      unsubscribe();
+      send('done', now);
+      res.end();
     }
   });
 

@@ -9,7 +9,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PLATFORM_DIR = path.resolve(__dirname, '../..');
 
 /**
- * Phase 3 controlled execution (ADR-0001). The safety model, in code:
+ * Phase 3 controlled execution (ADR-0001), async job model since Phase 4.2.
+ * The safety model, in code:
  *
  * - The browser can never run arbitrary shell. The client-supplied `:id`
  *   only *selects a row* in a fixed command table derived from the permanent
@@ -19,11 +20,15 @@ const PLATFORM_DIR = path.resolve(__dirname, '../..');
  *   confirm token bound to the operation id; run requires `confirm: true`
  *   plus that token. No token, no execution.
  * - One run at a time (single-flight); concurrent run attempts get 409.
+ * - run() starts a job and returns immediately (202 at the route); progress
+ *   is observable via getRun(runId) snapshots and subscribe(runId) events —
+ *   the streaming changes nothing about what may execute or when.
  * - Around every run: a `git status --porcelain` snapshot before/after, and
  *   a `git diff` when anything changed — the allowlisted checks are
  *   read-only, so a non-empty diff is itself a finding worth surfacing.
  * - Every run appends one JSON line (op, ts, status, files, output) to the
- *   audit log, success or failure.
+ *   audit log at completion, success or failure — same shape as the
+ *   synchronous era.
  */
 
 /** Fixed command table: every allowlisted id is exactly `npm run <id>`. */
@@ -33,7 +38,8 @@ function defaultCommands() {
 
 export const CONFIRM_TOKEN_TTL_MS = 10 * 60 * 1000;
 export const RUN_TIMEOUT_MS = 10 * 60 * 1000;
-const OUTPUT_CAP = 100_000; // per stream, response payload (tail kept)
+export const JOB_HISTORY_LIMIT = 20;
+const OUTPUT_CAP = 100_000; // per stream, snapshot payload (tail kept)
 const AUDIT_OUTPUT_CAP = 4_000; // per stream, audit line (tail kept)
 
 class ExecError extends Error {
@@ -64,7 +70,8 @@ function gitCapture(repoRoot, args) {
  */
 export function createExecutor(config, { commands = defaultCommands(), timeoutMs = RUN_TIMEOUT_MS } = {}) {
   const tokens = new Map(); // token → { id, expiresAt }
-  let running = null; // id of the in-flight run, or null
+  const jobs = new Map(); // runId → job (insertion order = start order)
+  let running = null; // runId of the in-flight job, or null
 
   function requireExecutable(id) {
     if (!EXECUTABLE_ALLOWLIST.includes(id) || !commands[id]) {
@@ -97,6 +104,119 @@ export function createExecutor(config, { commands = defaultCommands(), timeoutMs
     }
   }
 
+  /** Public job view: caps the streams, hides listeners. */
+  function snapshot(job) {
+    return {
+      runId: job.runId,
+      op: job.op,
+      status: job.status,
+      command: job.command,
+      cwd: PLATFORM_DIR,
+      ts: job.ts,
+      startedAt: job.ts,
+      finishedAt: job.finishedAt,
+      exitCode: job.exitCode,
+      durationMs: job.durationMs,
+      stdout: tail(job.stdout, OUTPUT_CAP),
+      stderr: tail(job.stderr, OUTPUT_CAP),
+      gitAvailable: job.gitAvailable,
+      changedFiles: job.changedFiles,
+      gitDiff: job.gitDiff,
+    };
+  }
+
+  function emit(job, event) {
+    for (const listener of job.listeners) listener(event);
+  }
+
+  function pruneJobs() {
+    const finished = [...jobs.values()].filter((j) => j.status !== 'running');
+    for (let i = 0; i < finished.length - JOB_HISTORY_LIMIT; i++) {
+      jobs.delete(finished[i].runId);
+    }
+  }
+
+  /** The actual execution — runs detached from the HTTP request. */
+  async function execute(job, argv) {
+    try {
+      const statusBefore = await gitCapture(config.REPO_ROOT, ['status', '--porcelain']);
+      const t0 = Date.now();
+
+      const result = await new Promise((resolve) => {
+        const child = spawn(argv[0], argv.slice(1), {
+          cwd: PLATFORM_DIR,
+          shell: false,
+          env: { ...process.env, REPO_ROOT: config.REPO_ROOT },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+        let timedOut = false;
+        const timer = setTimeout(() => {
+          timedOut = true;
+          child.kill('SIGKILL');
+        }, timeoutMs);
+        child.stdout.on('data', (d) => {
+          job.stdout += d;
+          emit(job, { type: 'output', stream: 'stdout', chunk: String(d) });
+        });
+        child.stderr.on('data', (d) => {
+          job.stderr += d;
+          emit(job, { type: 'output', stream: 'stderr', chunk: String(d) });
+        });
+        child.on('error', (err) => {
+          clearTimeout(timer);
+          job.stderr += `\nspawn failed: ${err.message}`;
+          resolve({ exitCode: null, timedOut });
+        });
+        child.on('exit', (exitCode) => {
+          clearTimeout(timer);
+          resolve({ exitCode, timedOut });
+        });
+      });
+
+      const statusAfter = await gitCapture(config.REPO_ROOT, ['status', '--porcelain']);
+      job.gitAvailable = statusBefore !== null && statusAfter !== null;
+      if (job.gitAvailable) {
+        const before = new Set(statusBefore.split('\n').filter(Boolean));
+        job.changedFiles = statusAfter.split('\n').filter((line) => line && !before.has(line));
+        if (job.changedFiles.length > 0) {
+          job.gitDiff = tail((await gitCapture(config.REPO_ROOT, ['diff'])) ?? '', OUTPUT_CAP);
+        }
+      }
+
+      job.exitCode = result.exitCode;
+      job.durationMs = Date.now() - t0;
+      job.status = result.timedOut ? 'timeout' : result.exitCode === 0 ? 'ok' : 'failed';
+    } catch (err) {
+      job.stderr += `\nexecutor error: ${err.message}`;
+      job.status = 'failed';
+      job.durationMs = job.durationMs ?? 0;
+    } finally {
+      job.finishedAt = new Date().toISOString();
+      running = null;
+      // Audit at completion — same line shape as the synchronous era.
+      try {
+        await appendAuditEntry(config, {
+          ts: job.ts,
+          op: job.op,
+          status: job.status,
+          exitCode: job.exitCode,
+          durationMs: job.durationMs,
+          command: job.command,
+          files: job.changedFiles,
+          output: {
+            stdout: tail(job.stdout, AUDIT_OUTPUT_CAP),
+            stderr: tail(job.stderr, AUDIT_OUTPUT_CAP),
+          },
+        });
+      } catch (err) {
+        job.stderr += `\naudit append failed: ${err.message}`;
+      }
+      emit(job, { type: 'done', snapshot: snapshot(job) });
+      job.listeners.clear();
+      pruneJobs();
+    }
+  }
+
   return {
     /** POST /api/operations/:id/dry-run — describe the run, issue the confirm token. */
     dryRun(id) {
@@ -116,88 +236,59 @@ export function createExecutor(config, { commands = defaultCommands(), timeoutMs
       };
     },
 
-    /** POST /api/operations/:id/run — execute after dry-run + explicit confirm. */
-    async run(id, body = {}) {
+    /**
+     * POST /api/operations/:id/run — validate (allowlist, confirm, token,
+     * single-flight), start the job, return its first snapshot immediately.
+     * The route answers 202; progress via getRun()/subscribe().
+     */
+    run(id, body = {}) {
       const argv = requireExecutable(id);
       if (body.confirm !== true) {
         throw new ExecError(400, 'confirm-required', 'run requires an explicit {"confirm": true}');
       }
       consumeToken(id, body.confirmToken);
       if (running !== null) {
-        throw new ExecError(409, 'run-in-flight', `another operation (${running}) is already running`);
+        throw new ExecError(409, 'run-in-flight', `another operation is already running (run ${running})`);
       }
-      running = id;
-      try {
-        const statusBefore = await gitCapture(config.REPO_ROOT, ['status', '--porcelain']);
-        const startedAt = new Date();
-        const t0 = Date.now();
 
-        const result = await new Promise((resolve) => {
-          const child = spawn(argv[0], argv.slice(1), {
-            cwd: PLATFORM_DIR,
-            shell: false,
-            env: { ...process.env, REPO_ROOT: config.REPO_ROOT },
-            stdio: ['ignore', 'pipe', 'pipe'],
-          });
-          let stdout = '';
-          let stderr = '';
-          let timedOut = false;
-          const timer = setTimeout(() => {
-            timedOut = true;
-            child.kill('SIGKILL');
-          }, timeoutMs);
-          child.stdout.on('data', (d) => (stdout += d));
-          child.stderr.on('data', (d) => (stderr += d));
-          child.on('error', (err) => {
-            clearTimeout(timer);
-            resolve({ exitCode: null, stdout, stderr: `${stderr}\nspawn failed: ${err.message}`, timedOut });
-          });
-          child.on('exit', (exitCode) => {
-            clearTimeout(timer);
-            resolve({ exitCode, stdout, stderr, timedOut });
-          });
-        });
+      const job = {
+        runId: crypto.randomUUID(),
+        op: id,
+        status: 'running',
+        command: argv.join(' '),
+        ts: new Date().toISOString(),
+        finishedAt: null,
+        exitCode: null,
+        durationMs: null,
+        stdout: '',
+        stderr: '',
+        gitAvailable: null,
+        changedFiles: null,
+        gitDiff: null,
+        listeners: new Set(),
+      };
+      running = job.runId;
+      jobs.set(job.runId, job);
+      void execute(job, argv); // detached — completion clears `running`
+      return snapshot(job);
+    },
 
-        const statusAfter = await gitCapture(config.REPO_ROOT, ['status', '--porcelain']);
-        const gitAvailable = statusBefore !== null && statusAfter !== null;
-        let changedFiles = null;
-        let gitDiff = null;
-        if (gitAvailable) {
-          const before = new Set(statusBefore.split('\n').filter(Boolean));
-          changedFiles = statusAfter.split('\n').filter((line) => line && !before.has(line));
-          if (changedFiles.length > 0) {
-            gitDiff = tail((await gitCapture(config.REPO_ROOT, ['diff'])) ?? '', OUTPUT_CAP);
-          }
-        }
+    /** GET /api/operations/runs/:runId — job snapshot, or null if unknown. */
+    getRun(runId) {
+      const job = jobs.get(runId);
+      return job ? snapshot(job) : null;
+    },
 
-        const status = result.timedOut ? 'timeout' : result.exitCode === 0 ? 'ok' : 'failed';
-        const entry = {
-          ts: startedAt.toISOString(),
-          op: id,
-          status,
-          exitCode: result.exitCode,
-          durationMs: Date.now() - t0,
-          command: argv.join(' '),
-          files: changedFiles,
-          output: {
-            stdout: tail(result.stdout, AUDIT_OUTPUT_CAP),
-            stderr: tail(result.stderr, AUDIT_OUTPUT_CAP),
-          },
-        };
-        await appendAuditEntry(config, entry);
-
-        return {
-          ...entry,
-          stdout: tail(result.stdout, OUTPUT_CAP),
-          stderr: tail(result.stderr, OUTPUT_CAP),
-          gitAvailable,
-          changedFiles,
-          gitDiff,
-          output: undefined, // audit-line form; the response carries the fuller streams above
-        };
-      } finally {
-        running = null;
-      }
+    /**
+     * Subscribe to a job's events ({type:'output'|'done'}); returns an
+     * unsubscribe function. A finished job emits nothing further — callers
+     * should read getRun() first (the SSE route sends that snapshot).
+     */
+    subscribe(runId, listener) {
+      const job = jobs.get(runId);
+      if (!job || job.status !== 'running') return () => {};
+      job.listeners.add(listener);
+      return () => job.listeners.delete(listener);
     },
   };
 }

@@ -299,6 +299,14 @@ try {
       typeof opDryBody.confirmToken === 'string' &&
       opDryBody.confirmToken.length > 0
   );
+
+  // §4.2 job routes: unknown runIds 404 on both snapshot and SSE forms.
+  const runUnknown = await req(port, { reqPath: '/api/operations/runs/no-such-run' });
+  const sseUnknown = await req(port, { reqPath: '/api/operations/runs/no-such-run/events' });
+  record(
+    'unknown run ids are 404 on the snapshot and SSE routes',
+    runUnknown.status === 404 && sseUnknown.status === 404
+  );
 } catch (err) {
   record('server boots and reports listening', false, err.message);
 } finally {

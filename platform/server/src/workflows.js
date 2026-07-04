@@ -115,6 +115,23 @@ const RUNBOOK_SHAPE_RES = [
 
 const ACCEPTED_MARKER_RE = /accepted|standing/i;
 
+/**
+ * Per-check fix hints (roadmap §4.4): what to change in the memory repo to
+ * clear the defect. Advisory text only — never an action the console takes.
+ */
+const FIX_HINTS = {
+  indexed: 'Add a link to this workflow in wiki/index.md.',
+  metadata: 'Fix the frontmatter (see detail) — valid YAML, a known workflow_kind, checks_exempt as a list, updated as YYYY-MM-DD.',
+  todos: "Resolve the TODO/FIXME/open-questions items, or mark them 'accepted'/'standing' if they are deliberate.",
+  verification:
+    "Add a '## Verification' section (or a 'Manual run checklist' / 'Result recording'), or state 'Verification: not applicable' as an explicit decision.",
+  'runbook-shape': 'Give the runbook procedural shape: numbered steps, a checkbox list, or a checklist/steps/procedure section.',
+};
+
+/** Workflow-level hint for Unclassified rows (no failing check to hang it on). */
+export const UNCLASSIFIED_FIX_HINT =
+  'Add workflow_kind frontmatter (runbook | reference | style-guide | policy | inventory | eval-suite) — it is never inferred (ADR-0007).';
+
 /** Unaccepted TODO/FIXME lines + unaccepted "Open questions" headings. */
 function findOpenTodos(body) {
   const problems = [];
@@ -174,12 +191,16 @@ function evaluateWorkflow(config, ctx, relPath, text, stat, now) {
   const kindBooleans = kindKnown ? WORKFLOW_KINDS[declaredKind] : null;
   const checks = [];
   const required = (id, label, pass, detail = '') => {
+    const status = isExempt(id) ? 'exempt' : pass ? 'pass' : 'fail';
     checks.push({
       id,
       label,
       category: 'required',
-      status: isExempt(id) ? 'exempt' : pass ? 'pass' : 'fail',
+      status,
       detail,
+      // Roadmap §4.4: shorten the path from defect to fix. Hints only — the
+      // console never edits the memory repo; the fix is LLM/user work there.
+      ...(status === 'fail' && FIX_HINTS[id] ? { fixHint: FIX_HINTS[id] } : {}),
     });
   };
   const requiredIfKind = (id, label, applies, pass, detail = '') => {
@@ -255,6 +276,7 @@ function evaluateWorkflow(config, ctx, relPath, text, stat, now) {
     status,
     statusLabel: STATUS_LABELS[status],
     failingRequired: checks.filter((c) => c.category === 'required' && c.status === 'fail').length,
+    ...(status === 'unclassified' ? { fixHint: UNCLASSIFIED_FIX_HINT } : {}),
     checks,
   };
 }

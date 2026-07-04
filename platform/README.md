@@ -101,11 +101,21 @@ and `spawn()` runs with `shell: false`. The flow (`server/src/executor.js`):
    (10-minute TTL, bound to the operation id). Nothing executes.
 2. **Run** requires `{"confirm": true, "confirmToken": ...}`; anything else is `400`.
    Guided/unknown ids are `405 not-executable`; a concurrent run is `409` (single-flight).
+   Since Phase 4.2, run answers `202` with a `runId` immediately; progress via
+   `GET /api/operations/runs/:runId` (snapshot) and `.../events` (SSE: `snapshot`,
+   `output` chunks, final `done`) — same-origin only, behind the same Host/Origin guard.
 3. Around every run: `git status --porcelain` before/after and a `git diff` when anything
    changed (the checks are read-only — a non-empty diff is itself a finding), plus
    stdout/stderr (tail-capped) and the exit code.
 4. Every run — ok, failed, or timeout — appends one JSON line (op, ts, status, files,
-   output) to `platform/logs/operations.log`, tailed by `GET /api/audit`.
+   output) to `platform/logs/operations.log` at completion, tailed by `GET /api/audit`.
+   Retention (Phase 4.3): size-based rollover (`AUDIT_ROTATE_BYTES`, default 1 MB, keeping
+   `AUDIT_ROTATE_KEEP` rotated files, default 3); rotation renames whole files only and the
+   reader spans rotated files, so the tail is loss-free across the boundary.
+
+CI (Phase 4.1, `.github/workflows/ci.yml`) runs the repo-independent subset on push/PR:
+`npm ci`, `npm test`, `npm run check:paths`, `npm run build`. The live-repo checks stay
+local/manual — they need the memory repo.
 
 ## Security model
 

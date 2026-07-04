@@ -1,5 +1,6 @@
 import { ArrowLeft, ExternalLink } from 'lucide-react';
 import CopyButtons from './CopyButton.jsx';
+import CommandPreview from './CommandPreview.jsx';
 
 const CHECK_STATUS_LABEL = {
   pass: 'pass',
@@ -21,11 +22,33 @@ function ChecksTable({ title, checks }) {
                 {CHECK_STATUS_LABEL[c.status]}
               </td>
               <td>{c.label}</td>
-              <td className="wf-check-detail">{c.detail}</td>
+              <td className="wf-check-detail">
+                {c.detail}
+                {c.fixHint && <div className="wf-fix-hint">fix: {c.fixHint}</div>}
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+    </>
+  );
+}
+
+/**
+ * Actionable defects (roadmap §4.4): a copyable /aos-implement prompt built
+ * from the failing objective checks (or the Unclassified hint). Copy-only,
+ * exactly like guided operations — the console never edits the memory repo;
+ * the fix runs as an LLM/user session there.
+ */
+function FixPrompt({ workflow, failing }) {
+  const hints = failing.map((c) => c.fixHint || c.label);
+  if (workflow.fixHint) hints.push(workflow.fixHint);
+  if (hints.length === 0) return null;
+  const prompt = `/aos-implement In the memory repo, fix ${workflow.path}: ${hints.join(' ')}`;
+  return (
+    <>
+      <div className="label wf-checks-label">Fix (copy into a Claude session in the memory repo)</div>
+      <CommandPreview command={prompt} />
     </>
   );
 }
@@ -87,6 +110,7 @@ export default function WorkflowDetail({ workflow, onBack, onOpenDoc }) {
         </tbody>
       </table>
       <ChecksTable title="Objective checks (status-impacting)" checks={required} />
+      <FixPrompt workflow={workflow} failing={required.filter((c) => c.status === 'fail')} />
       <ChecksTable title="Informational (never turns the row yellow)" checks={informational} />
       {workflow.relatedFiles.length > 0 && (
         <>
