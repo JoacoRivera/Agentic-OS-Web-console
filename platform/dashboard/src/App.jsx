@@ -3,6 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import Sidebar from './components/Sidebar.jsx';
 import OverviewView from './views/OverviewView.jsx';
 import PlaceholderView from './views/PlaceholderView.jsx';
+import ReviewQueueView from './views/ReviewQueueView.jsx';
 import SettingsView from './views/SettingsView.jsx';
 import { SECTIONS } from './sections.js';
 
@@ -51,6 +52,8 @@ export default function App() {
   let view;
   if (sectionId === 'overview') {
     view = <OverviewView status={status} metrics={metrics} metricsError={metricsError} />;
+  } else if (sectionId === 'review-queue') {
+    view = <ReviewQueueView metrics={metrics} metricsError={metricsError} />;
   } else if (sectionId === 'settings') {
     view = <SettingsView status={status} poll={poll} onPollChange={setPoll} />;
   } else {
