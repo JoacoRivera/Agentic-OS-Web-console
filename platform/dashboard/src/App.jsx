@@ -3,6 +3,7 @@ import { RefreshCw } from 'lucide-react';
 import Sidebar from './components/Sidebar.jsx';
 import OverviewView from './views/OverviewView.jsx';
 import DocsView from './views/DocsView.jsx';
+import WorkflowsView from './views/WorkflowsView.jsx';
 import PlaceholderView from './views/PlaceholderView.jsx';
 import ReviewQueueView from './views/ReviewQueueView.jsx';
 import SettingsView from './views/SettingsView.jsx';
@@ -17,6 +18,9 @@ export default function App() {
   const [metricsError, setMetricsError] = useState(null);
   const [poll, setPoll] = useState(true);
   const [manualRefreshKey, setManualRefreshKey] = useState(0);
+  // "Open file" from another section: switch to Documentation showing `path`.
+  // A counter key so re-opening the same path still triggers navigation.
+  const [docRequest, setDocRequest] = useState(null);
 
   // Live reads (plan): refresh is simply "fetch again" — no cache semantics.
   const refresh = useCallback(async () => {
@@ -60,7 +64,17 @@ export default function App() {
   if (sectionId === 'overview') {
     view = <OverviewView status={status} metrics={metrics} metricsError={metricsError} />;
   } else if (sectionId === 'documentation') {
-    view = <DocsView refreshKey={manualRefreshKey} />;
+    view = <DocsView refreshKey={manualRefreshKey} openRequest={docRequest} />;
+  } else if (sectionId === 'workflows') {
+    view = (
+      <WorkflowsView
+        refreshKey={manualRefreshKey}
+        onOpenDoc={(path) => {
+          setDocRequest({ path, key: Date.now() });
+          setSectionId('documentation');
+        }}
+      />
+    );
   } else if (sectionId === 'review-queue') {
     view = <ReviewQueueView metrics={metrics} metricsError={metricsError} />;
   } else if (sectionId === 'settings') {

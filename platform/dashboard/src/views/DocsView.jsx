@@ -41,7 +41,7 @@ function SearchResults({ search, onSelect }) {
  * (right). Live reads — the tree refreshes on mount; doc, backlinks, and
  * search results are fetched per interaction.
  */
-export default function DocsView({ refreshKey = 0 }) {
+export default function DocsView({ refreshKey = 0, openRequest = null }) {
   const [tree, setTree] = useState(null);
   const [treeError, setTreeError] = useState(null);
   const [selected, setSelected] = useState(null);
@@ -112,6 +112,11 @@ export default function DocsView({ refreshKey = 0 }) {
       cancelled = true;
     };
   }, [selected, refreshKey]);
+
+  // Cross-section "open file" requests (e.g. WorkflowDetail) select the doc.
+  useEffect(() => {
+    if (openRequest?.path) setSelected(openRequest.path);
+  }, [openRequest]);
 
   // Scroll to a #heading fragment once the navigated-to doc has rendered.
   useEffect(() => {

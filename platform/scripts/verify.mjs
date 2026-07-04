@@ -162,6 +162,32 @@ try {
   });
   record('backlinks path traversal is rejected (400)', badBacklink.status === 400);
 
+  const wf = await req(port, { reqPath: '/api/workflows' });
+  const wfBody = wf.status === 200 ? JSON.parse(wf.body) : {};
+  record(
+    '/api/workflows responds 200 with workflows[] + summary',
+    wf.status === 200 && Array.isArray(wfBody.workflows) && typeof wfBody.summary?.total === 'number'
+  );
+  record(
+    'no workflow status is inferred green: every row has a status + kind may be null',
+    wf.status === 200 &&
+      wfBody.workflows.every(
+        (w) => ['missing-links', 'needs-review', 'unclassified', 'stale', 'ok'].includes(w.status) &&
+          (w.kind === null || typeof w.kind === 'string')
+      )
+  );
+
+  const wfOne =
+    wfBody.workflows?.length > 0
+      ? await req(port, { reqPath: '/api/workflow?path=' + encodeURIComponent(wfBody.workflows[0].path) })
+      : { status: -1 };
+  record(
+    '/api/workflow?path= resolves a slashed workflow path (200 with checks[])',
+    wfOne.status === 200 && Array.isArray(JSON.parse(wfOne.body).checks)
+  );
+  const wfBad = await req(port, { reqPath: '/api/workflow?path=' + encodeURIComponent('../../etc/passwd') });
+  record('workflow path traversal is rejected (400)', wfBad.status === 400);
+
   const badHost = await req(port, { headers: { Host: 'evil.example' } });
   record('non-loopback Host header is rejected (403)', badHost.status === 403);
 
