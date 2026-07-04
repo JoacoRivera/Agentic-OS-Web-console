@@ -1337,3 +1337,88 @@ svg.growth {
   font-size: 11px;
   word-break: break-all;
 }
+
+/* ---- Phase 3 controlled execution ---- */
+
+.exec-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.exec-error {
+  color: var(--accent-2);
+  font-size: 11px;
+}
+
+.exec-confirm {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
+.exec-confirm-text {
+  color: var(--accent-2);
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.exec-run-btn {
+  border-color: var(--accent);
+  color: var(--accent-2);
+}
+
+.exec-result {
+  margin-top: 10px;
+}
+
+.exec-result-meta {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.exec-stream {
+  margin-top: 8px;
+  padding: 8px 10px;
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--dim);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.exec-stream-err {
+  color: var(--accent-2);
+}
+
+.exec-changed {
+  margin-top: 8px;
+}
+
+.audit-entry-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.audit-op {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.audit-meta {
+  color: var(--dim);
+  font-size: 10px;
+}

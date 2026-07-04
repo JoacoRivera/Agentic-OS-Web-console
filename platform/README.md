@@ -18,6 +18,10 @@ yet) — see ADR-0005.
 | `npm start`      | Serve API + built dashboard on `http://127.0.0.1:3001`     |
 | `npm test`       | In-process API tests (Seam 1: exported `app`, no bind)     |
 | `npm run verify` | Boot smoke (Seam 2: real startup, bind + guard checks)     |
+| `npm run check:paths` | `paths.safeResolve` rejects traversal/absolute/out-of-root (table test) |
+| `npm run check:docs`  | Docs tree/read/search/backlinks + raw gating against the live repo |
+| `npm run check:workflows` | Registry inclusion + status roll-up vs an independent recount (ADR-0006/0007) |
+| `npm run check:skills` | Skill registry vs an independent directory recount — no phantom skill |
 | `npm run check:metrics-groundtruth` | `/api/metrics` vs an independent filesystem recount (permanent check, ADR-0002; no `aos-hud.js` dependency) |
 
 ## Configuration (env)
@@ -81,19 +85,37 @@ operation is an interactive checklist (per-browser progress via `localStorage`, 
 reset) plus a command preview. Operations with `params` render fill-in inputs whose
 values substitute into the preview's `<name>` tokens — producing the exact text the user
 **copies and runs themselves** (in a terminal or a Claude session). Params never leave
-the browser; no endpoint accepts them. The console still executes nothing: LLM Skills
-are guided-only forever (ADR-0001), and the executable allowlist (deterministic checks
-only) stays described-but-inert until Phase 3 — `run`/`dry-run` return `501`. The catalog
-module enforces both invariants at load time, and additionally throws on a param without
-a matching preview token.
+the browser; no endpoint accepts them. LLM Skills are guided-only forever (ADR-0001);
+the catalog module enforces the invariants at load time, and additionally throws on a
+param without a matching preview token.
 
-## Security model (Phases 1–2)
+## Controlled execution (Phase 3, `POST /api/operations/:id/{dry-run,run}`)
+
+Only the **permanent executable allowlist** runs — the six deterministic checks
+(`verify`, `check:paths`, `check:docs`, `check:workflows`, `check:skills`,
+`check:metrics-groundtruth`), each mapped to its fixed `npm run <id>` in a server-side
+command table. The client-supplied `:id` only selects a row; it is never interpolated,
+and `spawn()` runs with `shell: false`. The flow (`server/src/executor.js`):
+
+1. **Dry-run** describes the exact command/cwd and issues a **single-use confirm token**
+   (10-minute TTL, bound to the operation id). Nothing executes.
+2. **Run** requires `{"confirm": true, "confirmToken": ...}`; anything else is `400`.
+   Guided/unknown ids are `405 not-executable`; a concurrent run is `409` (single-flight).
+3. Around every run: `git status --porcelain` before/after and a `git diff` when anything
+   changed (the checks are read-only — a non-empty diff is itself a finding), plus
+   stdout/stderr (tail-capped) and the exit code.
+4. Every run — ok, failed, or timeout — appends one JSON line (op, ts, status, files,
+   output) to `platform/logs/operations.log`, tailed by `GET /api/audit`.
+
+## Security model
 
 - Loopback bind (`listen(PORT, HOST)`, default `127.0.0.1`); non-loopback `HOST`
   without configured auth is **invalid configuration** — startup fails non-zero.
 - The API validates the `Host` header against loopback hosts and rejects cross-origin
   `Origin`s (DNS-rebinding defense). No permissive CORS.
-- `POST /api/operations/:id/run` and `/dry-run` return `501` until Phase 3.
+- `POST /api/operations/:id/run` and `/dry-run` accept only the executable allowlist,
+  behind dry-run + explicit confirm (see Controlled execution above). No generic shell
+  endpoint exists.
 - Client-supplied paths go through `paths.safeResolve` (rejects `..`, absolute paths,
   anything outside the allowed roots). Path safety prevents reading outside the roots;
   it does **not** make the roots safe to expose — those are two different problems.

@@ -115,17 +115,44 @@ test('a skill-backed operation previews that skill\'s real invocation', async ()
   }
 });
 
-test('POST /api/operations/:id/run returns 501 before P3 (ADR-0001)', async () => {
-  const res = await request(app)
-    .post('/api/operations/check-paths/run')
-    .set('Host', '127.0.0.1:3001');
-  assert.equal(res.status, 501);
-  assert.equal(res.body.error, 'not-implemented');
+test('POST run/dry-run on a non-allowlisted id is refused 405 (ADR-0001)', async () => {
+  // Guided ids and unknown ids alike: not in the allowlist → not executable.
+  for (const id of ['session-start', 'wiki-lint', 'anything', 'rm -rf']) {
+    const run = await request(app)
+      .post(`/api/operations/${encodeURIComponent(id)}/run`)
+      .set('Host', '127.0.0.1:3001')
+      .send({ confirm: true });
+    assert.equal(run.status, 405, `${id} run must be refused`);
+    assert.equal(run.body.error, 'not-executable');
+    const dry = await request(app)
+      .post(`/api/operations/${encodeURIComponent(id)}/dry-run`)
+      .set('Host', '127.0.0.1:3001');
+    assert.equal(dry.status, 405, `${id} dry-run must be refused`);
+  }
 });
 
-test('POST /api/operations/:id/dry-run returns 501 before P3 (ADR-0001)', async () => {
+test('POST run without dry-run + explicit confirm never executes (P3 safety model)', async () => {
+  const noConfirm = await request(app)
+    .post('/api/operations/check%3Apaths/run')
+    .set('Host', '127.0.0.1:3001')
+    .send({});
+  assert.equal(noConfirm.status, 400);
+  assert.equal(noConfirm.body.error, 'confirm-required');
+
+  const noToken = await request(app)
+    .post('/api/operations/check%3Apaths/run')
+    .set('Host', '127.0.0.1:3001')
+    .send({ confirm: true });
+  assert.equal(noToken.status, 400);
+  assert.equal(noToken.body.error, 'confirm-token-invalid');
+});
+
+test('POST dry-run on an allowlisted id describes the fixed command and issues a token', async () => {
   const res = await request(app)
-    .post('/api/operations/anything/dry-run')
+    .post('/api/operations/check%3Apaths/dry-run')
     .set('Host', '127.0.0.1:3001');
-  assert.equal(res.status, 501);
+  assert.equal(res.status, 200);
+  assert.equal(res.body.command, 'npm run check:paths');
+  assert.ok(res.body.confirmToken.length > 0);
+  assert.equal(res.body.mode, 'dry-run');
 });

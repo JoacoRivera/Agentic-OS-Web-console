@@ -1,11 +1,11 @@
 import GuidedOperationCard from './GuidedOperationCard.jsx';
-import CommandPreview from './CommandPreview.jsx';
+import ExecutableOperationCard from './ExecutableOperationCard.jsx';
 
 /**
- * Operations catalog (ADR-0001). Guided operations are interactive flows in
- * Phase 2 — checkable checklists + param fill-ins feeding the copyable
- * command preview; executable operations are the described Phase-3 allowlist.
- * Nothing here runs anything.
+ * Operations catalog (ADR-0001). Guided operations are interactive flows —
+ * checkable checklists + param fill-ins feeding the copyable command preview
+ * (never run). Executable operations are the Phase-3 deterministic allowlist,
+ * live behind dry-run → explicit confirm → audited run.
  */
 export default function OperationsPanel({ data, onOpenDoc }) {
   const { operations, counts, note } = data;
@@ -28,19 +28,11 @@ export default function OperationsPanel({ data, onOpenDoc }) {
           Executable allowlist <span className="label-sub">{counts.executable} · Phase 3</span>
         </div>
         <div className="wf-summary">
-          Deterministic checks only — no LLM Skill is ever executable. Until Phase 3, run and
-          dry-run return 501.
+          Deterministic checks only — no LLM Skill is ever executable. Every run is dry-run
+          first, explicitly confirmed, one at a time, and appended to the audit log.
         </div>
         {executable.map((op) => (
-          <div className="skill-card" key={op.id}>
-            <div className="skill-head">
-              <span className="skill-name">{op.title}</span>
-              <span className="chip warn">executable · P3</span>
-              {op.migrationOnly && <span className="chip warn">migration-only</span>}
-            </div>
-            {op.description && <div className="skill-desc">{op.description}</div>}
-            <CommandPreview command={op.commandPreview} />
-          </div>
+          <ExecutableOperationCard key={op.id} op={op} />
         ))}
       </div>
     </>

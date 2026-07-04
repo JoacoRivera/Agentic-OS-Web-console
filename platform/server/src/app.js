@@ -8,6 +8,7 @@ import { buildDocsTree, readDocFile, searchDocs, findBacklinks } from './docs.js
 import { listWorkflows, getWorkflow } from './workflows.js';
 import { listSkills } from './skills.js';
 import { listOperations } from './operations.js';
+import { createExecutor } from './executor.js';
 import { readAuditTail } from './audit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -17,7 +18,7 @@ const DIST_DIR = path.resolve(__dirname, '../../dashboard/dist');
  * Build the Express app. Exported separately from listen() — the primary
  * test seam: tests drive /api/* in-process (supertest-style) with no bind.
  */
-export function createApp(config) {
+export function createApp(config, { executor = createExecutor(config) } = {}) {
   const app = express();
   app.disable('x-powered-by');
 
@@ -28,7 +29,7 @@ export function createApp(config) {
     res.json({
       status: 'ready',
       service: 'agentic-os-web-console',
-      phase: 'P2',
+      phase: 'P3',
       host: config.HOST,
       port: config.PORT,
       repoRoot: config.REPO_ROOT,
@@ -151,7 +152,7 @@ export function createApp(config) {
     }
   });
 
-  // Audit tail: honestly empty until Phase 3 execution appends entries.
+  // Audit tail: every Phase 3 run appends one entry (op, ts, status, files, output).
   app.get('/api/audit', async (req, res) => {
     try {
       res.json(await readAuditTail(config));
@@ -160,15 +161,30 @@ export function createApp(config) {
     }
   });
 
-  // Controlled execution is Phase 3 (ADR-0001); until then both endpoints 501.
-  const notImplemented = (req, res) => {
-    res.status(501).json({
-      error: 'not-implemented',
-      message: 'Operation execution is Phase 3; this console is read-only (ADR-0001)',
-    });
+  // Controlled execution (Phase 3, ADR-0001): allowlist-only, dry-run first,
+  // explicit confirm, single-flight, audited. The :id only selects a row in
+  // the executor's fixed command table — it is never interpolated.
+  const sendExecError = (res, err) => {
+    if (err.name === 'ExecError') {
+      res.status(err.status).json({ error: err.code, message: err.message });
+    } else {
+      res.status(500).json({ error: 'exec-failed', message: err.message });
+    }
   };
-  app.post('/api/operations/:id/dry-run', notImplemented);
-  app.post('/api/operations/:id/run', notImplemented);
+  app.post('/api/operations/:id/dry-run', (req, res) => {
+    try {
+      res.json(executor.dryRun(req.params.id));
+    } catch (err) {
+      sendExecError(res, err);
+    }
+  });
+  app.post('/api/operations/:id/run', async (req, res) => {
+    try {
+      res.json(await executor.run(req.params.id, req.body ?? {}));
+    } catch (err) {
+      sendExecError(res, err);
+    }
+  });
 
   app.use('/api', (req, res) => {
     res.status(404).json({ error: 'not-found' });

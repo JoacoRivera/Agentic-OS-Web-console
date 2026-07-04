@@ -6,8 +6,8 @@
  *   never shells out, never invokes Claude. Every LLM-Skill-backed operation
  *   is guided — Skills need LLM judgment and are not console-executable.
  * - `executable` — deterministic allowlisted local code, wired in Phase 3
- *   only. Until then the catalog merely *describes* the allowlist;
- *   run/dry-run return 501.
+ *   (live since 2026-07-04): dry-run first, explicit confirm, single-flight,
+ *   audited — see executor.js for the safety model.
  *
  * The `check:hud-parity` migration gate was retired by the human
  * HUD-deprecation sign-off of 2026-07-04 (ADR-0002 amendment); the
@@ -16,8 +16,8 @@
  * Phase 2: guided operations may declare `params` — structured fill-ins for
  * the command preview. Each param's `<name>` token appears literally in
  * `commandPreview`; the dashboard substitutes the typed value into the text
- * the user copies. Params never leave the browser: there is no endpoint that
- * accepts them, and run/dry-run still return 501.
+ * the user copies. Params never leave the browser: no endpoint accepts them —
+ * run/dry-run take only {confirm, confirmToken} for allowlisted ids.
  */
 
 /** Permanent Phase-3 executable allowlist — deterministic checks only. */
@@ -261,7 +261,7 @@ function buildCatalog() {
       params: [],
       migrationOnly: false,
       ...op,
-      // Nothing runs before Phase 3 — run/dry-run return 501 until then.
+      // Execution landed with Phase 3: dry-run → confirm → run, audited.
       executableInPhase: 3,
     })),
   ];
@@ -319,9 +319,11 @@ export function listOperations() {
     },
     allowlist: EXECUTABLE_ALLOWLIST,
     executionPhase: 3,
+    executionEnabled: true,
     note:
       'Guided operations are interactive checklists + command previews (fill in, copy — never run); ' +
-      'executable operations are wired in Phase 3 only — run/dry-run return 501 (ADR-0001).',
+      'executable operations are the deterministic Phase-3 allowlist: dry-run → explicit confirm → ' +
+      'run, one at a time, every run audited (ADR-0001).',
     generatedAt: new Date().toISOString(),
   };
 }

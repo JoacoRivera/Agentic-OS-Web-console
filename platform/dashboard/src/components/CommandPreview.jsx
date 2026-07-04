@@ -2,8 +2,8 @@ import { CopyButton } from './CopyButton.jsx';
 
 /**
  * Command preview: the exact text a human would run/type, with a copy
- * button — and deliberately nothing else. No run button exists anywhere
- * before Phase 3 (ADR-0001).
+ * button — and deliberately nothing else. Run buttons exist only on
+ * executable-allowlist cards, behind dry-run + confirm (ADR-0001).
  */
 export default function CommandPreview({ command }) {
   return (

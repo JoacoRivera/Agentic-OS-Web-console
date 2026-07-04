@@ -1,13 +1,20 @@
 import fs from 'node:fs/promises';
+import path from 'node:path';
 
 /**
- * Audit log reader. Phase 3 appends one JSON line per executed operation
- * (op, ts, status, files, output) to platform/logs/operations.log; in P1
- * nothing is executable, so the tail is honestly empty. Reader only — the
- * append half lands with controlled execution (Phase 3, ADR-0001).
+ * Audit log: one JSON line per executed operation (op, ts, status, files,
+ * output) in platform/logs/operations.log. The reader tails it; the append
+ * half is called by the Phase 3 executor on every run, success or failure
+ * (ADR-0001 — every write/exec leaves an audit entry).
  */
 
 export const AUDIT_TAIL_LIMIT = 200;
+
+/** Append one entry as a JSON line, creating the logs dir on first write. */
+export async function appendAuditEntry(config, entry) {
+  await fs.mkdir(path.dirname(config.AUDIT_LOG_PATH), { recursive: true });
+  await fs.appendFile(config.AUDIT_LOG_PATH, JSON.stringify(entry) + '\n', 'utf8');
+}
 
 /** GET /api/audit — tail of the operations log; missing file = empty log. */
 export async function readAuditTail(config, limit = AUDIT_TAIL_LIMIT) {

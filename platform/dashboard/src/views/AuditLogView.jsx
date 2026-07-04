@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import AuditLog from '../components/AuditLog.jsx';
 
-/** Audit section (placeholder until P3 execution): tail of /api/audit. */
+/** Audit section (Phase 3): tail of /api/audit, one entry per executed run. */
 export default function AuditLogView({ refreshKey = 0 }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(null);

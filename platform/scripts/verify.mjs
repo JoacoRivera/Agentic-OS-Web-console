@@ -272,13 +272,33 @@ try {
 
   const audit = await req(port, { reqPath: '/api/audit' });
   record(
-    '/api/audit responds 200 with entries[] (empty until P3 execution)',
+    '/api/audit responds 200 with entries[] (one appended per P3 run)',
     audit.status === 200 && Array.isArray(JSON.parse(audit.body).entries)
   );
 
-  const opRun = await req(port, { method: 'POST', reqPath: '/api/operations/x/run' });
-  const opDry = await req(port, { method: 'POST', reqPath: '/api/operations/x/dry-run' });
-  record('POST /api/operations/:id/{run,dry-run} return 501 before P3', opRun.status === 501 && opDry.status === 501);
+  // P3 controlled execution: only allowlisted ids are executable, dry-run
+  // issues the confirm token, and run without dry-run + confirm never
+  // executes. verify never confirms a run — that would recurse.
+  const opUnknown = await req(port, { method: 'POST', reqPath: '/api/operations/x/run' });
+  const opGuided = await req(port, { method: 'POST', reqPath: '/api/operations/session-start/run' });
+  record(
+    'non-allowlisted ids (guided/unknown) are refused (405, ADR-0001)',
+    opUnknown.status === 405 && opGuided.status === 405
+  );
+  const opNoConfirm = await req(port, { method: 'POST', reqPath: '/api/operations/check%3Apaths/run' });
+  record(
+    'an allowlisted run without dry-run + explicit confirm is refused (400)',
+    opNoConfirm.status === 400 && JSON.parse(opNoConfirm.body).error === 'confirm-required'
+  );
+  const opDry = await req(port, { method: 'POST', reqPath: '/api/operations/check%3Apaths/dry-run' });
+  const opDryBody = opDry.status === 200 ? JSON.parse(opDry.body) : {};
+  record(
+    'dry-run describes the fixed allowlist command and issues a confirm token',
+    opDry.status === 200 &&
+      opDryBody.command === 'npm run check:paths' &&
+      typeof opDryBody.confirmToken === 'string' &&
+      opDryBody.confirmToken.length > 0
+  );
 } catch (err) {
   record('server boots and reports listening', false, err.message);
 } finally {

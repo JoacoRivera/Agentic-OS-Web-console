@@ -13,6 +13,10 @@
     "start": "node --env-file-if-exists=.env server/src/index.js",
     "test": "npm test --workspace server",
     "verify": "node --env-file-if-exists=.env scripts/verify.mjs",
+    "check:paths": "node scripts/check-paths.mjs",
+    "check:docs": "node --env-file-if-exists=.env scripts/check-docs.mjs",
+    "check:workflows": "node --env-file-if-exists=.env scripts/check-workflows.mjs",
+    "check:skills": "node --env-file-if-exists=.env scripts/check-skills.mjs",
     "check:metrics-groundtruth": "node --env-file-if-exists=.env scripts/check-metrics-groundtruth.mjs"
   },
   "engines": {
