@@ -1,10 +1,34 @@
+import { useEffect, useState } from 'react';
+
 /**
- * One diagnostic card (plan: Overview). Rows only claim what this slice can
- * honestly compute — registry verdicts (workflows/skills) land in their own
- * slices, and the ground-truth check is a local script, not a browser call.
+ * One diagnostic card (plan: Overview). Docs/drafts/lint rows come from the
+ * metrics prop; workflow/skill rows come from their registries live (re-read
+ * whenever metrics refresh — reads are live, no cache). The ground-truth and
+ * parity checks are local scripts, not browser calls, so they stay pointers.
  */
 export default function RepoHealth({ metrics }) {
-  const { wikiN, rawN, workflows, draftN, health } = metrics;
+  const { wikiN, rawN, draftN, health } = metrics;
+  const [registries, setRegistries] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [wRes, sRes] = await Promise.all([fetch('/api/workflows'), fetch('/api/skills')]);
+        const summary = wRes.ok ? (await wRes.json()).summary : null;
+        const skillCount = sRes.ok ? (await sRes.json()).skills.length : null;
+        if (!cancelled) setRegistries({ summary, skillCount });
+      } catch {
+        if (!cancelled) setRegistries({ summary: null, skillCount: null });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [metrics]);
+
+  const summary = registries?.summary;
+  const defects = summary ? summary['missing-links'] + summary['needs-review'] : 0;
   const rows = [
     {
       k: 'Docs',
@@ -12,13 +36,17 @@ export default function RepoHealth({ metrics }) {
     },
     {
       k: 'Workflows',
-      v: `${workflows} found`,
-      note: 'registry checks — later slice',
+      v: summary
+        ? `${summary.ok} OK · ${summary['needs-review']} needs review · ${summary.unclassified} unclassified`
+        : registries
+          ? 'registry unavailable'
+          : '…',
+      warn: defects > 0,
+      note: summary && summary['missing-links'] > 0 ? `${summary['missing-links']} missing links` : '',
     },
     {
       k: 'Skills',
-      v: '—',
-      note: 'registry — later slice',
+      v: registries ? (registries.skillCount === null ? 'registry unavailable' : `${registries.skillCount} found`) : '…',
     },
     {
       k: 'Draft captures',

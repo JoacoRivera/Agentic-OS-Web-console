@@ -9,6 +9,8 @@ import OperationsView from './views/OperationsView.jsx';
 import AuditLogView from './views/AuditLogView.jsx';
 import PlaceholderView from './views/PlaceholderView.jsx';
 import ReviewQueueView from './views/ReviewQueueView.jsx';
+import MemoryHealthView from './views/MemoryHealthView.jsx';
+import ActivityView from './views/ActivityView.jsx';
 import SettingsView from './views/SettingsView.jsx';
 import { SECTIONS } from './sections.js';
 
@@ -90,6 +92,10 @@ export default function App() {
     );
   } else if (sectionId === 'review-queue') {
     view = <ReviewQueueView metrics={metrics} metricsError={metricsError} />;
+  } else if (sectionId === 'memory-health') {
+    view = <MemoryHealthView metrics={metrics} metricsError={metricsError} />;
+  } else if (sectionId === 'activity') {
+    view = <ActivityView metrics={metrics} metricsError={metricsError} />;
   } else if (sectionId === 'operations') {
     view = (
       <OperationsView
