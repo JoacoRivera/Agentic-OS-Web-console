@@ -36,6 +36,12 @@ before(async () => {
     '# HUD\n\nWikilink: [[manual-operations]] and heading form [[manual-operations#session-close]]\n' +
       'Alias form: [[manual-operations|the runbook]]. Unrelated: [[other-page]].\n'
   );
+  await write(
+    'wiki/reference-links.md',
+    '# Reference links\n\nFull form: [the ops runbook][ops].\nCollapsed form: [ops][].\n' +
+      'External ref: [site][ext]. Unknown label: [nope][missing].\n\n' +
+      '[ops]: workflows/manual-operations.md\n[ext]: https://example.com/\n'
+  );
   await write('wiki/collisions/duplicate.md', '# Duplicate A\n\n');
   await write('dashboards/duplicate.md', '# Duplicate B\n\n');
   await write('wiki/collisions/ambiguous-link.md', '# Ambiguous\n\n[[duplicate]]\n');
@@ -127,6 +133,15 @@ test('backlinks resolve relative, up-dir, root-relative, anchor, and wikilink fo
   assert.ok(byPath['dashboards/hud.md'], 'wikilink not resolved');
   // [[manual-operations]] + [[manual-operations#session-close]] + alias form.
   assert.equal(byPath['dashboards/hud.md'].count, 3);
+});
+
+test('backlinks resolve reference-style links (full and collapsed forms)', async () => {
+  const res = await get(app(), '/api/docs/backlinks?path=wiki/workflows/manual-operations.md');
+  const hit = res.body.backlinks.find((b) => b.path === 'wiki/reference-links.md');
+  assert.ok(hit, 'reference-style link not resolved');
+  // [the ops runbook][ops] + [ops][] — the external and unknown-label
+  // usages must not count.
+  assert.equal(hit.count, 2);
 });
 
 test('a doc with no inbound links has no backlinks', async () => {

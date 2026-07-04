@@ -142,6 +142,26 @@ try {
   const rawGate = await req(port, { reqPath: '/api/docs/file?path=raw/anything.md' });
   record('raw content is hidden by default (403, ADR-0005)', rawGate.status === 403);
 
+  const search = await req(port, { reqPath: '/api/docs/search?q=memory' });
+  record(
+    '/api/docs/search responds 200 with results[]',
+    search.status === 200 && Array.isArray(JSON.parse(search.body).results)
+  );
+  const emptyQ = await req(port, { reqPath: '/api/docs/search' });
+  record('search without q is rejected (400)', emptyQ.status === 400);
+
+  const backlinks = await req(port, {
+    reqPath: '/api/docs/backlinks?path=' + encodeURIComponent('wiki/index.md'),
+  });
+  record(
+    '/api/docs/backlinks responds 200 with backlinks[]',
+    backlinks.status === 200 && Array.isArray(JSON.parse(backlinks.body).backlinks)
+  );
+  const badBacklink = await req(port, {
+    reqPath: '/api/docs/backlinks?path=' + encodeURIComponent('../../etc/passwd'),
+  });
+  record('backlinks path traversal is rejected (400)', badBacklink.status === 400);
+
   const badHost = await req(port, { headers: { Host: 'evil.example' } });
   record('non-loopback Host header is rejected (403)', badHost.status === 403);
 

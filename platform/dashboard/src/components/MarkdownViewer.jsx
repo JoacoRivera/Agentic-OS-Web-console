@@ -1,14 +1,9 @@
+import { useLayoutEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CornerDownLeft, EyeOff, List } from 'lucide-react';
 import CopyButtons from './CopyButton.jsx';
-import {
-  remarkWikilinks,
-  resolveDocHref,
-  slugify,
-  headingText,
-  extractToc,
-} from '../doclinks.js';
+import { remarkWikilinks, resolveDocHref, slugify, createSlugger } from '../doclinks.js';
 
 /** Scroll a heading (by fragment) into view inside the rendered doc. */
 export function scrollToFragment(fragment) {
@@ -65,11 +60,6 @@ function DocLink({ href, children, currentPath, docIndex, onNavigate }) {
   );
 }
 
-const heading = (Tag) =>
-  function Heading({ children }) {
-    return <Tag id={`doc-h-${slugify(headingText(children))}`}>{children}</Tag>;
-  };
-
 /**
  * Renders one doc: source badge + copy cluster + frontmatter + GFM markdown,
  * with a right-side rail (table of contents + backlinks). The custom `a`
@@ -79,6 +69,30 @@ const heading = (Tag) =>
  * ADR-0005 notice, not an error.
  */
 export default function MarkdownViewer({ doc, error, loading, docIndex, backlinks, onNavigate }) {
+  const bodyRef = useRef(null);
+  const [toc, setToc] = useState([]);
+
+  // Assign heading ids + build the TOC from the *rendered* DOM: a fresh
+  // slugger per doc gives duplicate headings unique -1/-2 anchors, and the
+  // TOC can never drift from what react-markdown actually produced. Runs
+  // before paint (and before DocsView's fragment-scroll effect).
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!doc || !el) {
+      setToc([]);
+      return;
+    }
+    const slugFor = createSlugger();
+    const items = [];
+    for (const h of el.querySelectorAll('h1, h2, h3, h4')) {
+      const text = h.textContent.trim();
+      const slug = slugFor(text);
+      h.id = `doc-h-${slug}`;
+      items.push({ depth: Number(h.tagName[1]), text, slug });
+    }
+    setToc(items);
+  }, [doc]);
+
   if (loading) {
     return <div className="placeholder-body">Loading doc…</div>;
   }
@@ -102,7 +116,6 @@ export default function MarkdownViewer({ doc, error, loading, docIndex, backlink
   }
 
   const fmEntries = Object.entries(doc.frontmatter ?? {});
-  const toc = extractToc(doc.markdown);
 
   return (
     <div className="doc-view">
@@ -131,14 +144,10 @@ export default function MarkdownViewer({ doc, error, loading, docIndex, backlink
               ))}
             </div>
           )}
-          <div className="markdown">
+          <div className="markdown" ref={bodyRef}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkWikilinks]}
               components={{
-                h1: heading('h1'),
-                h2: heading('h2'),
-                h3: heading('h3'),
-                h4: heading('h4'),
                 a: ({ href, children }) => (
                   <DocLink
                     href={href}

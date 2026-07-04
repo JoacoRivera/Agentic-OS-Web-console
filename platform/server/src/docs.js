@@ -174,9 +174,31 @@ export async function searchDocs(config, query) {
 const MD_LINK_RE = /\[[^\]]*\]\(<?([^)\s>]+)>?(?:\s[^)]*)?\)/g;
 // Obsidian wikilinks: [[page]], [[page#heading]], [[page|alias]].
 const WIKILINK_RE = /\[\[([^\]]+)\]\]/g;
+// Reference-style links: a `[label]: url` definition line…
+const MD_REF_DEF_RE = /^[ \t]{0,3}\[([^\]]+)\]:[ \t]*(\S+)(?:[ \t]+.*)?$/gm;
+// …used as [text][label] (full) or [label][] (collapsed). The shortcut form
+// ([label] alone) is not counted — too ambiguous against plain brackets.
+const MD_REF_USE_RE = /\[([^\]]*)\]\[([^\]]*)\]/g;
 
 /** True when an href points outside the repo (scheme'd URL, mailto, etc.). */
 const isExternalHref = (href) => /^[a-z][a-z0-9+.-]*:/i.test(href);
+
+/** True when `rawHref` (relative or root-relative, ±#fragment) is `target`. */
+function hrefResolvesTo(rawHref, dir, target) {
+  if (isExternalHref(rawHref)) return false;
+  const href = rawHref.split('#')[0];
+  if (!href) return false; // bare #anchor — self-link
+  let decoded = href;
+  try {
+    decoded = decodeURIComponent(href);
+  } catch {
+    /* malformed escape — match on the raw form */
+  }
+  return (
+    path.posix.normalize(path.posix.join(dir, decoded)) === target ||
+    path.posix.normalize(decoded) === target
+  );
+}
 
 /**
  * Docs that link to `relPath`, resolving the P1 link forms: relative links
@@ -215,18 +237,21 @@ export async function findBacklinks(config, relPath) {
     let count = 0;
 
     for (const [, rawHref] of text.matchAll(MD_LINK_RE)) {
-      if (isExternalHref(rawHref)) continue;
-      const href = rawHref.split('#')[0];
-      if (!href) continue; // bare #anchor — self-link
-      let decoded = href;
-      try {
-        decoded = decodeURIComponent(href);
-      } catch {
-        /* malformed escape — match on the raw form */
+      if (hrefResolvesTo(rawHref, dir, target)) count++;
+    }
+
+    // Reference-style: resolve each [text][label] / [label][] usage through
+    // the file's `[label]: url` definitions (labels are case-insensitive).
+    const refDefs = new Map();
+    for (const [, label, url] of text.matchAll(MD_REF_DEF_RE)) {
+      const bare = url.replace(/^</, '').replace(/>$/, '');
+      if (!refDefs.has(label.toLowerCase())) refDefs.set(label.toLowerCase(), bare);
+    }
+    if (refDefs.size > 0) {
+      for (const [, textPart, labelPart] of text.matchAll(MD_REF_USE_RE)) {
+        const url = refDefs.get((labelPart || textPart).toLowerCase());
+        if (url && hrefResolvesTo(url, dir, target)) count++;
       }
-      const relative = path.posix.normalize(path.posix.join(dir, decoded));
-      const rootRelative = path.posix.normalize(decoded);
-      if (relative === target || rootRelative === target) count++;
     }
 
     for (const [, inner] of text.matchAll(WIKILINK_RE)) {

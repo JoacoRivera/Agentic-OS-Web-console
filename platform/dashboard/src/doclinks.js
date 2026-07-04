@@ -110,7 +110,7 @@ export function resolveDocHref(href, currentPath, docIndex) {
   return { kind: 'unresolved', href };
 }
 
-/** GitHub-style heading slug (no duplicate counter — P1 keeps it simple). */
+/** GitHub-style heading slug (base form, no duplicate counter). */
 export function slugify(text) {
   return text
     .toLowerCase()
@@ -119,31 +119,16 @@ export function slugify(text) {
     .replace(/\s+/g, '-');
 }
 
-/** Plain text of a react-markdown heading's children. */
-export function headingText(children) {
-  const flat = (node) => {
-    if (node == null || typeof node === 'boolean') return '';
-    if (typeof node === 'string' || typeof node === 'number') return String(node);
-    if (Array.isArray(node)) return node.map(flat).join('');
-    return flat(node.props?.children);
+/**
+ * GitHub-style slugger: repeated heading texts get -1, -2, … suffixes, in
+ * document order. One instance per rendered doc.
+ */
+export function createSlugger() {
+  const seen = new Map();
+  return (text) => {
+    const base = slugify(text);
+    const n = seen.get(base) ?? 0;
+    seen.set(base, n + 1);
+    return n === 0 ? base : `${base}-${n}`;
   };
-  return flat(children);
-}
-
-/** Extract {depth, text, slug} headings from markdown, skipping code fences. */
-export function extractToc(markdown) {
-  const toc = [];
-  let inFence = false;
-  for (const line of (markdown ?? '').split('\n')) {
-    if (/^\s*(```|~~~)/.test(line)) {
-      inFence = !inFence;
-      continue;
-    }
-    if (inFence) continue;
-    const match = line.match(/^(#{1,4})\s+(.+?)\s*#*\s*$/);
-    if (!match) continue;
-    const text = match[2].replace(/\[\[([^\]]+)\]\]/g, '$1').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
-    toc.push({ depth: match[1].length, text, slug: slugify(text) });
-  }
-  return toc;
 }
