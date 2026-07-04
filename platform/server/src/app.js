@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { hostOriginGuard } from './security.js';
 import { computeMetrics } from './metrics.js';
+import { buildDocsTree, readDocFile } from './docs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '../../dashboard/dist');
@@ -40,6 +41,32 @@ export function createApp(config) {
       res.json(await computeMetrics(config));
     } catch (err) {
       res.status(500).json({ error: 'metrics-failed', message: err.message });
+    }
+  });
+
+  // Docs explorer: tree + single-file read. Raw *content* is gated by
+  // EXPOSE_RAW_CONTENT (ADR-0005); path safety rejects traversal (400).
+  app.get('/api/docs/tree', async (req, res) => {
+    try {
+      res.json(await buildDocsTree(config));
+    } catch (err) {
+      res.status(500).json({ error: 'docs-tree-failed', message: err.message });
+    }
+  });
+
+  app.get('/api/docs/file', async (req, res) => {
+    try {
+      res.json(await readDocFile(config, req.query.path));
+    } catch (err) {
+      if (err.name === 'PathSafetyError') {
+        res.status(400).json({ error: 'unsafe-path', message: err.message });
+      } else if (err.name === 'RawContentHiddenError') {
+        res.status(403).json({ error: 'raw-content-hidden', message: err.message });
+      } else if (err.code === 'ENOENT' || err.code === 'EISDIR') {
+        res.status(404).json({ error: 'not-found', message: 'no such doc' });
+      } else {
+        res.status(500).json({ error: 'docs-file-failed', message: err.message });
+      }
     }
   });
 
