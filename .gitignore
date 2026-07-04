@@ -3,3 +3,4 @@ node_modules/
 platform/dashboard/dist/
 platform/apps/*/dist/
 platform/logs/
+platform/.env

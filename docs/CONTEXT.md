@@ -37,11 +37,11 @@ which conflated ground-truth correctness with HUD migration — ADR-0002.)
 _Avoid_: check:metrics-parity (conflated name), making it depend on the HUD
 
 **check:hud-parity**:
-The **temporary migration gate** comparing the web console against the Obsidian HUD *during
-migration only*. The HUD is a migration **oracle**, not a peer. Outside the permanent
-allowlist (or flagged `migrationOnly: true`). Retired by an explicit human HUD-deprecation
-sign-off once `check:metrics-groundtruth` is green and the console is canonical (ADR-0002).
-_Avoid_: treating HUD parity as a permanent invariant or putting it in the permanent allowlist
+The **temporary migration gate** that compared the web console against the Obsidian HUD
+*during migration only*. The HUD was a migration **oracle**, not a peer. **Retired** by the
+human HUD-deprecation sign-off of 2026-07-04 (ADR-0002 amendment), after its final run
+passed against the live repo; the check no longer exists in the codebase.
+_Avoid_: reintroducing it, treating HUD parity as a permanent invariant, or putting it in the permanent allowlist
 
 ### Memory lineage dates
 

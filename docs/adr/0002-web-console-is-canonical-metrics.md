@@ -41,3 +41,19 @@ both runtimes, we retire one runtime.
 - After deprecation, do not change the HUD except to add a visible deprecation notice.
 - Fallback rule: *if* both dashboards must stay active beyond a short transition, switch to
   the shared `lib/aos-metrics` module instead.
+
+## Sign-off (2026-07-04)
+
+**HUD deprecated; console metrics canonical; `check:hud-parity` retired.**
+
+Signed off by the Agentic OS maintainer/operator (Joaquin Rivera) on 2026-07-04, after
+`check:metrics-groundtruth` passed against the live memory repo and the final
+`check:hud-parity` run passed (all compared fields equal; `series`/`last30` deliberately
+divergent per ADR-0003). Consequences applied:
+
+- `check:hud-parity` removed from `platform/package.json`, the operations catalog, and
+  `platform/scripts/` (last passing run recorded above).
+- `dashboards/Agentic OS Dashboard.md` and `dashboards/aos-hud.js` in the memory repo carry
+  a visible deprecation notice; per this ADR they receive no other changes.
+- `AGENTS.md` in the memory repo states the console is canonical and the HUD is deprecated.
+- The permanent correctness check remains `check:metrics-groundtruth` only.

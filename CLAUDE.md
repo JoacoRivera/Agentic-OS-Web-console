@@ -42,9 +42,9 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
    not shell out to headless Claude or pretend a Skill is an npm script. The Phase-3
    executable allowlist contains **only** deterministic checks (`npm run verify`,
    `check:paths`, `check:docs`, `check:workflows`, `check:skills`, `check:metrics-groundtruth`).
-   `check:hud-parity` is a **temporary** migration gate, **not** in the permanent allowlist
-   (flag `migrationOnly: true` if co-located); the permanent allowlist must not depend on
-   `dashboards/aos-hud.js` (ADR-0001/0002).
+   `check:hud-parity` was a **temporary** migration gate, retired by the HUD-deprecation
+   sign-off of 2026-07-04 (ADR-0002 amendment) — do not reintroduce it; the permanent
+   allowlist must not depend on `dashboards/aos-hud.js` (ADR-0001/0002).
 
 2. **Loopback bind + Host/Origin defense + auth-gating are mandatory** (ADR-0005). Server
    defaults to `HOST=127.0.0.1` and calls `listen(PORT, HOST)`. A non-loopback `HOST` without
