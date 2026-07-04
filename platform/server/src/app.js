@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { hostOriginGuard } from './security.js';
 import { computeMetrics } from './metrics.js';
-import { buildDocsTree, readDocFile } from './docs.js';
+import { buildDocsTree, readDocFile, searchDocs, findBacklinks } from './docs.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '../../dashboard/dist');
@@ -66,6 +66,34 @@ export function createApp(config) {
         res.status(404).json({ error: 'not-found', message: 'no such doc' });
       } else {
         res.status(500).json({ error: 'docs-file-failed', message: err.message });
+      }
+    }
+  });
+
+  // Search: filename matches always; raw bodies/snippets only with
+  // EXPOSE_RAW_CONTENT=true (ADR-0005).
+  app.get('/api/docs/search', async (req, res) => {
+    try {
+      res.json(await searchDocs(config, req.query.q));
+    } catch (err) {
+      if (err.name === 'BadQueryError') {
+        res.status(400).json({ error: 'bad-query', message: err.message });
+      } else {
+        res.status(500).json({ error: 'docs-search-failed', message: err.message });
+      }
+    }
+  });
+
+  // Backlinks: docs that link to ?path= (relative, root-relative, wikilink,
+  // heading-anchor forms). Same path safety as /api/docs/file.
+  app.get('/api/docs/backlinks', async (req, res) => {
+    try {
+      res.json(await findBacklinks(config, req.query.path));
+    } catch (err) {
+      if (err.name === 'PathSafetyError') {
+        res.status(400).json({ error: 'unsafe-path', message: err.message });
+      } else {
+        res.status(500).json({ error: 'docs-backlinks-failed', message: err.message });
       }
     }
   });

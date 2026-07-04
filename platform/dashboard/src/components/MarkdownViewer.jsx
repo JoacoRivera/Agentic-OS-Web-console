@@ -1,14 +1,98 @@
+import { useLayoutEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { EyeOff } from 'lucide-react';
+import { CornerDownLeft, EyeOff, List } from 'lucide-react';
+import CopyButtons from './CopyButton.jsx';
+import { remarkWikilinks, resolveDocHref, slugify, createSlugger } from '../doclinks.js';
+
+/** Scroll a heading (by fragment) into view inside the rendered doc. */
+export function scrollToFragment(fragment) {
+  if (!fragment) return;
+  let decoded = fragment;
+  try {
+    decoded = decodeURIComponent(fragment);
+  } catch {
+    /* malformed escape — use as-is */
+  }
+  document.getElementById(`doc-h-${slugify(decoded)}`)?.scrollIntoView({ block: 'start' });
+}
+
+function DocLink({ href, children, currentPath, docIndex, onNavigate }) {
+  const resolved = resolveDocHref(href, currentPath, docIndex);
+  if (resolved.kind === 'external') {
+    return (
+      <a href={resolved.href} target="_blank" rel="noreferrer">
+        {children}
+      </a>
+    );
+  }
+  if (resolved.kind === 'anchor') {
+    return (
+      <a
+        href={`#${resolved.fragment}`}
+        onClick={(e) => {
+          e.preventDefault();
+          scrollToFragment(resolved.fragment);
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
+  if (resolved.kind === 'internal') {
+    return (
+      <a
+        className="doc-link-internal"
+        href={`#${resolved.path}`}
+        onClick={(e) => {
+          e.preventDefault();
+          onNavigate(resolved.path, resolved.fragment);
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
+  return (
+    <span className="doc-link-inert" title={`unresolved: ${href}`}>
+      {children}
+    </span>
+  );
+}
 
 /**
- * Renders one doc: source badge + frontmatter + GFM markdown (headings,
- * code, lists, tables). Raw-hidden (403) renders the ADR-0005 notice, not
- * an error. Internal link rewriting/backlinks arrive with slice #9 — for
- * now external links open in a new tab and relative links are inert.
+ * Renders one doc: source badge + copy cluster + frontmatter + GFM markdown,
+ * with a right-side rail (table of contents + backlinks). The custom `a`
+ * renderer rewrites internal links (relative, root-relative, wikilink,
+ * heading anchor) to in-console navigation; external links open in a new
+ * tab; unresolved targets render disabled. Raw-hidden (403) renders the
+ * ADR-0005 notice, not an error.
  */
-export default function MarkdownViewer({ doc, error, loading }) {
+export default function MarkdownViewer({ doc, error, loading, docIndex, backlinks, onNavigate }) {
+  const bodyRef = useRef(null);
+  const [toc, setToc] = useState([]);
+
+  // Assign heading ids + build the TOC from the *rendered* DOM: a fresh
+  // slugger per doc gives duplicate headings unique -1/-2 anchors, and the
+  // TOC can never drift from what react-markdown actually produced. Runs
+  // before paint (and before DocsView's fragment-scroll effect).
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!doc || !el) {
+      setToc([]);
+      return;
+    }
+    const slugFor = createSlugger();
+    const items = [];
+    for (const h of el.querySelectorAll('h1, h2, h3, h4')) {
+      const text = h.textContent.trim();
+      const slug = slugFor(text);
+      h.id = `doc-h-${slug}`;
+      items.push({ depth: Number(h.tagName[1]), text, slug });
+    }
+    setToc(items);
+  }, [doc]);
+
   if (loading) {
     return <div className="placeholder-body">Loading doc…</div>;
   }
@@ -32,6 +116,7 @@ export default function MarkdownViewer({ doc, error, loading }) {
   }
 
   const fmEntries = Object.entries(doc.frontmatter ?? {});
+
   return (
     <div className="doc-view">
       <div className="doc-head">
@@ -39,41 +124,93 @@ export default function MarkdownViewer({ doc, error, loading }) {
         <span className="doc-path" title={doc.absolutePath}>
           {doc.path}
         </span>
+        <CopyButtons relPath={doc.path} absPath={doc.absolutePath} />
       </div>
-      {fmEntries.length > 0 && (
-        <div className="doc-frontmatter">
-          {fmEntries.map(([key, value]) => (
-            <div key={key} className="doc-fm-row">
-              <span className="doc-fm-key">{key}</span>
-              <span className="doc-fm-value">
-                {Array.isArray(value)
-                  ? value.join(', ')
-                  : typeof value === 'object' && value !== null
-                    ? JSON.stringify(value)
-                    : String(value)}
-              </span>
+      <div className="doc-columns">
+        <div className="doc-main">
+          {fmEntries.length > 0 && (
+            <div className="doc-frontmatter">
+              {fmEntries.map(([key, value]) => (
+                <div key={key} className="doc-fm-row">
+                  <span className="doc-fm-key">{key}</span>
+                  <span className="doc-fm-value">
+                    {Array.isArray(value)
+                      ? value.join(', ')
+                      : typeof value === 'object' && value !== null
+                        ? JSON.stringify(value)
+                        : String(value)}
+                  </span>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+          <div className="markdown" ref={bodyRef}>
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm, remarkWikilinks]}
+              components={{
+                a: ({ href, children }) => (
+                  <DocLink
+                    href={href}
+                    currentPath={doc.path}
+                    docIndex={docIndex}
+                    onNavigate={onNavigate}
+                  >
+                    {children}
+                  </DocLink>
+                ),
+              }}
+            >
+              {doc.markdown}
+            </ReactMarkdown>
+          </div>
         </div>
-      )}
-      <div className="markdown">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            a: ({ href, children }) =>
-              /^https?:\/\//.test(href ?? '') ? (
-                <a href={href} target="_blank" rel="noreferrer">
-                  {children}
-                </a>
-              ) : (
-                <span className="doc-link-inert" title={href}>
-                  {children}
-                </span>
-              ),
-          }}
-        >
-          {doc.markdown}
-        </ReactMarkdown>
+        <div className="doc-rail">
+          {toc.length > 0 && (
+            <div className="doc-rail-section">
+              <div className="label">
+                <List size={10} style={{ marginRight: 5, verticalAlign: -1 }} />
+                Contents
+              </div>
+              {toc.map((h, i) => (
+                <button
+                  key={`${h.slug}-${i}`}
+                  className="doc-rail-row"
+                  style={{ paddingLeft: (h.depth - 1) * 10 }}
+                  onClick={() => scrollToFragment(h.slug)}
+                  title={h.text}
+                >
+                  {h.text}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="doc-rail-section">
+            <div className="label">
+              <CornerDownLeft size={10} style={{ marginRight: 5, verticalAlign: -1 }} />
+              Backlinks
+            </div>
+            {backlinks == null ? (
+              <div className="doc-rail-empty">Loading…</div>
+            ) : backlinks.length === 0 ? (
+              <div className="doc-rail-empty">No docs link here.</div>
+            ) : (
+              backlinks.map((b) => (
+                <button
+                  key={b.path}
+                  className="doc-rail-row doc-backlink"
+                  onClick={() => onNavigate(b.path)}
+                  title={b.path}
+                >
+                  <span className={`badge kind-${b.source}`}>{b.source}</span>
+                  <span className="doc-rail-name">
+                    {b.name}
+                    {b.count > 1 ? ` ×${b.count}` : ''}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

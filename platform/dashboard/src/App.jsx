@@ -16,6 +16,7 @@ export default function App() {
   const [metrics, setMetrics] = useState(null);
   const [metricsError, setMetricsError] = useState(null);
   const [poll, setPoll] = useState(true);
+  const [manualRefreshKey, setManualRefreshKey] = useState(0);
 
   // Live reads (plan): refresh is simply "fetch again" — no cache semantics.
   const refresh = useCallback(async () => {
@@ -41,6 +42,11 @@ export default function App() {
     }
   }, []);
 
+  const manualRefresh = useCallback(async () => {
+    await refresh();
+    setManualRefreshKey((key) => key + 1);
+  }, [refresh]);
+
   useEffect(() => {
     refresh();
     if (!poll) return undefined;
@@ -54,7 +60,7 @@ export default function App() {
   if (sectionId === 'overview') {
     view = <OverviewView status={status} metrics={metrics} metricsError={metricsError} />;
   } else if (sectionId === 'documentation') {
-    view = <DocsView />;
+    view = <DocsView refreshKey={manualRefreshKey} />;
   } else if (sectionId === 'review-queue') {
     view = <ReviewQueueView metrics={metrics} metricsError={metricsError} />;
   } else if (sectionId === 'settings') {
@@ -74,7 +80,7 @@ export default function App() {
               <span className="status-dot" />
               {status ? 'ready' : 'offline'}
             </span>
-            <button className="btn" onClick={refresh} title="Reads are live — refresh is simply fetch again">
+            <button className="btn" onClick={manualRefresh} title="Reads are live — refresh is simply fetch again">
               <RefreshCw size={11} strokeWidth={2} style={{ verticalAlign: '-1px', marginRight: 6 }} />
               Refresh
             </button>
