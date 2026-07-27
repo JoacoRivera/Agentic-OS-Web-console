@@ -23,7 +23,7 @@ export function createApp(config, { executor = createExecutor(config) } = {}) {
   const app = express();
   app.disable('x-powered-by');
 
-  app.use('/api', hostOriginGuard());
+  app.use('/api', hostOriginGuard(config));
   app.use('/api', express.json());
 
   app.get('/api/status', (req, res) => {
@@ -33,6 +33,7 @@ export function createApp(config, { executor = createExecutor(config) } = {}) {
       phase: 'P3',
       host: config.HOST,
       port: config.PORT,
+      localHostname: config.LOCAL_HOSTNAME,
       repoRoot: config.REPO_ROOT,
       exposeRawContent: config.EXPOSE_RAW_CONTENT,
       refreshMs: config.REFRESH_MS,

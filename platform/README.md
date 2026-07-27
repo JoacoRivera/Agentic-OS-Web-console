@@ -35,6 +35,7 @@ so copy `.env.example` to `.env` once (it sets `REPO_ROOT=~/agents/agentic-os`) 
 | -------------------- | -------------------------------- | ------------------------------------------------------------ |
 | `PORT`               | `3001`                           |                                                              |
 | `HOST`               | `127.0.0.1`                      | Non-loopback without auth **fails startup** (ADR-0005)       |
+| `LOCAL_HOSTNAME`     | unset                            | Optional local browser alias; prefer a `.localhost` name for automatic loopback resolution |
 | `REPO_ROOT`          | `../../..` from `server/src/`    | Path to the Agentic OS memory repo. Set in `.env` when developing outside it (e.g. `REPO_ROOT=~/agents/agentic-os`) |
 | `EXPOSE_RAW_CONTENT` | `false`                          | Gates raw **content** over HTTP only; raw metrics always computed (ADR-0005) |
 
@@ -133,8 +134,9 @@ local/manual — they need the memory repo.
 
 - Loopback bind (`listen(PORT, HOST)`, default `127.0.0.1`); non-loopback `HOST`
   without configured auth is **invalid configuration** — startup fails non-zero.
-- The API validates the `Host` header against loopback hosts and rejects cross-origin
-  `Origin`s (DNS-rebinding defense). No permissive CORS.
+- The API validates the `Host` header against loopback hosts plus, when configured,
+  one explicit local `LOCAL_HOSTNAME`, and rejects every other `Origin`
+  (DNS-rebinding defense). No permissive CORS.
 - `POST /api/operations/:id/run` and `/dry-run` accept only the executable allowlist,
   behind dry-run + explicit confirm (see Controlled execution above). No generic shell
   endpoint exists.

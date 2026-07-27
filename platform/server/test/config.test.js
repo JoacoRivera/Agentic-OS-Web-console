@@ -1,13 +1,44 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createConfig, assertStartable, isLoopbackHostname } from '../src/config.js';
+import {
+  createConfig,
+  assertStartable,
+  isAllowedLocalHostname,
+  isLoopbackHostname,
+} from '../src/config.js';
 
 test('defaults: loopback host, port 3001, raw content hidden', () => {
   const config = createConfig({});
   assert.equal(config.HOST, '127.0.0.1');
   assert.equal(config.PORT, 3001);
+  assert.equal(config.LOCAL_HOSTNAME, null);
   assert.equal(config.EXPOSE_RAW_CONTENT, false);
   assert.equal(config.AUTH_CONFIGURED, false);
+});
+
+test('LOCAL_HOSTNAME accepts and normalizes one explicit local alias', () => {
+  assert.equal(
+    createConfig({ LOCAL_HOSTNAME: 'Agentic-OS-Console' }).LOCAL_HOSTNAME,
+    'agentic-os-console'
+  );
+  assert.equal(createConfig({ LOCAL_HOSTNAME: '' }).LOCAL_HOSTNAME, null);
+  assert.equal(
+    createConfig({ LOCAL_HOSTNAME: 'Agentic-OS-Console.LOCALHOST' }).LOCAL_HOSTNAME,
+    'agentic-os-console.localhost'
+  );
+});
+
+test('LOCAL_HOSTNAME rejects DNS names and malformed aliases', () => {
+  for (const LOCAL_HOSTNAME of [
+    'console.example.com',
+    'console.localhost.example',
+    'bad alias',
+    '-leading-hyphen',
+    'trailing-hyphen-',
+    'a'.repeat(64),
+  ]) {
+    assert.throws(() => createConfig({ LOCAL_HOSTNAME }), /Invalid LOCAL_HOSTNAME/);
+  }
 });
 
 test('EXPOSE_RAW_CONTENT only enables on the exact string "true"', () => {
@@ -28,6 +59,22 @@ test('loopback hostname classification', () => {
   for (const h of ['0.0.0.0', '192.168.1.10', 'example.com', '', null, '127.0.0.1.evil.example']) {
     assert.equal(isLoopbackHostname(h), false, String(h));
   }
+});
+
+test('request hostname allowlist includes only loopback names and the configured alias', () => {
+  for (const h of ['127.0.0.1', 'localhost', '::1', '[::1]', 'agentic-os-console']) {
+    assert.equal(isAllowedLocalHostname(h, 'agentic-os-console'), true, h);
+  }
+  for (const h of ['evil.example', 'other-console', '', null]) {
+    assert.equal(isAllowedLocalHostname(h, 'agentic-os-console'), false, String(h));
+  }
+  assert.equal(
+    isAllowedLocalHostname(
+      'agentic-os-console.localhost',
+      'agentic-os-console.localhost'
+    ),
+    true
+  );
 });
 
 test('assertStartable passes on loopback hosts', () => {

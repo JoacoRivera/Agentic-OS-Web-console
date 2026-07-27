@@ -5,6 +5,12 @@ import { createApp } from '../src/app.js';
 import { createConfig } from '../src/config.js';
 
 const app = createApp(createConfig({ REPO_ROOT: '/tmp/fixture-root' }));
+const appWithAlias = createApp(
+  createConfig({
+    REPO_ROOT: '/tmp/fixture-root',
+    LOCAL_HOSTNAME: 'agentic-os-console.localhost',
+  })
+);
 
 test('loopback Host header is accepted', async () => {
   const res = await request(app).get('/api/status').set('Host', '127.0.0.1:3001');
@@ -17,6 +23,28 @@ test('localhost and [::1] Host headers are accepted', async () => {
     const res = await request(app).get('/api/status').set('Host', host);
     assert.equal(res.status, 200, `Host: ${host}`);
   }
+});
+
+test('the explicit local hostname is accepted for Host and same-origin requests', async () => {
+  const get = await request(appWithAlias)
+    .get('/api/status')
+    .set('Host', 'agentic-os-console.localhost');
+  assert.equal(get.status, 200);
+  assert.equal(get.body.localHostname, 'agentic-os-console.localhost');
+
+  const post = await request(appWithAlias)
+    .post('/api/operations/nope/dry-run')
+    .set('Host', 'agentic-os-console.localhost')
+    .set('Origin', 'http://agentic-os-console.localhost');
+  assert.equal(post.status, 405);
+});
+
+test('an unconfigured local-looking alias is rejected', async () => {
+  const res = await request(app)
+    .get('/api/status')
+    .set('Host', 'agentic-os-console.localhost');
+  assert.equal(res.status, 403);
+  assert.equal(res.body.error, 'forbidden-host');
 });
 
 test('a non-loopback Host header is rejected (DNS-rebinding defense)', async () => {

@@ -47,6 +47,22 @@ npm start
 
 Then open `http://127.0.0.1:3001`.
 
+### Windows login startup
+
+For a WSL installation, run the console as an enabled systemd service and use a
+per-user Windows Startup launcher to wake the distro. The idempotent Windows half is:
+
+```powershell
+.\platform\scripts\setup-windows-autostart.ps1
+```
+
+It creates a hidden Startup launcher and verifies the configured console URL.
+No administrator access or hosts-file change is needed because `.localhost`
+names resolve to loopback automatically. The server must also set
+`LOCAL_HOSTNAME=agentic-os-console.localhost`; use `PORT=80` when the URL should
+not include a port. The launcher keeps one explicit WSL process alive because
+systemd services alone do not prevent WSL from idle-terminating.
+
 ## Configuration
 
 `npm run dev`, `npm start`, `npm run verify`, and live-repo checks load
@@ -57,6 +73,7 @@ Then open `http://127.0.0.1:3001`.
 | `REPO_ROOT` | `../../..` from `platform/server/src` | Path to the Agentic OS memory repo. Use `~/agents/agentic-os` when this console is checked out separately. |
 | `PORT` | `3001` | Express server port. |
 | `HOST` | `127.0.0.1` | Bind host. Non-loopback hosts fail startup because no auth layer exists. |
+| `LOCAL_HOSTNAME` | unset | One explicit local browser alias. Prefer a `.localhost` name, which resolves to loopback automatically. |
 | `EXPOSE_RAW_CONTENT` | `false` | Allows raw memory content over HTTP when `true`. Raw metrics are always computed. |
 | `AUDIT_LOG_PATH` | `platform/logs/operations.log` | JSONL audit log for controlled executable operations. |
 | `AUDIT_ROTATE_BYTES` | `1000000` | Audit log rollover size. |
@@ -149,8 +166,9 @@ Important metric terms:
 
 - The server binds to `127.0.0.1` by default.
 - `HOST=0.0.0.0` or other non-loopback values fail startup because no auth layer exists.
-- API requests are guarded by loopback `Host` validation and cross-origin `Origin`
-  rejection. There is no permissive CORS.
+- API requests are guarded by loopback `Host` validation plus, when configured,
+  one explicit local `LOCAL_HOSTNAME`; cross-origin `Origin`s are rejected.
+  There is no permissive CORS.
 - Raw memory content is hidden by default. Set `EXPOSE_RAW_CONTENT=true` only when you
   explicitly want raw markdown bodies/snippets exposed to the local browser.
 - Path reads use safe path resolution to reject traversal and out-of-root access. This is

@@ -46,6 +46,19 @@ servers. Loopback is also shared on a multi-user host. So P1 must add Host/Origi
 - Docs state plainly: Phase 1 is localhost-only and not safe for LAN/public exposure
   without auth.
 
+## Amendment — explicit local browser alias (2026-07-24)
+
+The Host/Origin defense may additionally trust one operator-configured
+`LOCAL_HOSTNAME`. It is restricted to either a single-label hostname or that
+single label beneath the special-use `.localhost` domain (for example,
+`agentic-os-console.localhost`), and is matched exactly for both `Host` and
+`Origin`. `.localhost` is preferred because it resolves to loopback without an
+operating-system hosts-file change; a bare single-label alias must be mapped to
+`127.0.0.1` explicitly. Arbitrary DNS names, suffix matching, wildcard hosts, and
+non-loopback binding remain forbidden. This provides a memorable local URL
+without expanding the listener to the LAN or weakening the default-deny request
+guard.
+
 ## Principle
 
 Path safety prevents reading outside the allowed roots; it does not make the allowed roots

@@ -4,11 +4,42 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '::1']);
+const LOCAL_HOSTNAME_PATTERN =
+  /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.localhost)?$/;
+
+function normalizeHostname(hostname) {
+  if (typeof hostname !== 'string') return null;
+  return hostname.replace(/^\[|\]$/g, '').trim().toLowerCase();
+}
 
 /** True if `hostname` (no port, no brackets) is a loopback name. */
 export function isLoopbackHostname(hostname) {
-  if (typeof hostname !== 'string') return false;
-  return LOOPBACK_HOSTNAMES.has(hostname.replace(/^\[|\]$/g, '').toLowerCase());
+  return LOOPBACK_HOSTNAMES.has(normalizeHostname(hostname));
+}
+
+/**
+ * True when a request hostname is a literal loopback name or the one explicit
+ * local alias configured by the operator.
+ */
+export function isAllowedLocalHostname(hostname, localHostname = null) {
+  const normalized = normalizeHostname(hostname);
+  return (
+    LOOPBACK_HOSTNAMES.has(normalized) ||
+    (localHostname !== null && normalized === localHostname)
+  );
+}
+
+function localHostnameFromEnv(value) {
+  if (value === undefined || value === '') return null;
+  const hostname = normalizeHostname(value);
+  if (!LOCAL_HOSTNAME_PATTERN.test(hostname)) {
+    throw new Error(
+      'Invalid LOCAL_HOSTNAME: use one single-label hostname containing only letters, ' +
+        'numbers, and interior hyphens, optionally followed by .localhost ' +
+        '(for example, agentic-os-console.localhost).'
+    );
+  }
+  return hostname;
 }
 
 /**
@@ -19,6 +50,9 @@ export function createConfig(env = process.env) {
   return {
     PORT: Number(env.PORT ?? 3001),
     HOST: env.HOST ?? '127.0.0.1',
+    // Optional, explicit browser alias. Use a .localhost name for automatic
+    // loopback resolution, or map a single-label name in the OS hosts file.
+    LOCAL_HOSTNAME: localHostnameFromEnv(env.LOCAL_HOSTNAME),
     // Default assumes platform/ lives inside the Agentic OS repo
     // (repo root = ../../.. from server/src). Overridable for dev/tests.
     REPO_ROOT: env.REPO_ROOT
