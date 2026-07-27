@@ -5,6 +5,7 @@ import express from 'express';
 import { hostOriginGuard } from './security.js';
 import { computeMetrics } from './metrics.js';
 import { buildDocsTree, readDocFile, searchDocs, findBacklinks } from './docs.js';
+import { queryMemory } from './memory.js';
 import { listWorkflows, getWorkflow } from './workflows.js';
 import { listSkills } from './skills.js';
 import { listOperations } from './operations.js';
@@ -99,6 +100,23 @@ export function createApp(config, { executor = createExecutor(config) } = {}) {
         res.status(400).json({ error: 'unsafe-path', message: err.message });
       } else {
         res.status(500).json({ error: 'docs-backlinks-failed', message: err.message });
+      }
+    }
+  });
+
+  // Memory recall (ADR-0001/0005): deterministic tag-based recall over
+  // wiki/**/*.md only — mirrors the aos-query-memory Skill's mechanical half
+  // (scripts/wiki-tags.py). raw/ is never read here regardless of
+  // EXPOSE_RAW_CONTENT. Finds pages only; it never invokes Hermes, Claude,
+  // Codex, or any Skill — synthesis stays a copy-only handoff in the UI.
+  app.get('/api/memory/query', async (req, res) => {
+    try {
+      res.json(await queryMemory(config, req.query.topic));
+    } catch (err) {
+      if (err.name === 'BadQueryError') {
+        res.status(400).json({ error: 'bad-query', message: err.message });
+      } else {
+        res.status(500).json({ error: 'memory-query-failed', message: err.message });
       }
     }
   });

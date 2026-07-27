@@ -9,6 +9,7 @@ import {
   TerminalSquare,
   ScrollText,
   Settings,
+  BrainCircuit,
 } from 'lucide-react';
 
 /**
@@ -20,6 +21,7 @@ export const SECTIONS = [
   { id: 'documentation', label: 'Documentation', icon: BookOpen, phase: 1 },
   { id: 'workflows', label: 'Workflows', icon: Workflow, phase: 1 },
   { id: 'skills', label: 'Skills', icon: Sparkles, phase: 1 },
+  { id: 'memory-query', label: 'Memory Query', icon: BrainCircuit, phase: 1 },
   { id: 'review-queue', label: 'Review Queue', icon: Inbox, phase: 1 },
   { id: 'memory-health', label: 'Memory Health', icon: HeartPulse, phase: 1 },
   { id: 'activity', label: 'Activity', icon: Activity, phase: 1 },

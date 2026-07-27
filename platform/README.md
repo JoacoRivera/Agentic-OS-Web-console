@@ -51,6 +51,18 @@ wiki+raw+templates+dashboards minus `_template`; **double-counts a promoted item
 ADR-0003); a 7-day `week` by mtime (`weekTotal`, `activeDays`); `recent`; `health` from
 the first `lint` entry in `wiki/log.md`; `targets` + `trend`.
 
+## Memory query (`GET /api/memory/query?topic=`)
+
+The Memory Query section performs deterministic, read-only recall over frontmatter tags in
+`wiki/**/*.md`: it discovers matching tags, ranks published wiki pages by tag overlap, and
+returns each page's path, title, one-line summary, and matched tags. It never searches or
+returns `raw/` content, even when `EXPOSE_RAW_CONTENT=true`.
+
+This endpoint only finds candidate pages; it does not synthesize an answer or execute an LLM
+Skill. The dashboard offers a guided, copy-only Hermes handoff in the exact form
+`/hermes-aos aos-query-memory <topic>`. The operator runs that command in Hermes; the console
+never invokes Hermes, Claude, Codex, or an Agentic OS Skill (ADR-0001).
+
 ## Workflow registry (`GET /api/workflows`, `GET /api/workflow?path=`)
 
 Scans `wiki/workflows/**.md`, excluding `**/{examples,cases,results}/**` (related data,

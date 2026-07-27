@@ -10,6 +10,7 @@ import AuditLogView from './views/AuditLogView.jsx';
 import PlaceholderView from './views/PlaceholderView.jsx';
 import ReviewQueueView from './views/ReviewQueueView.jsx';
 import MemoryHealthView from './views/MemoryHealthView.jsx';
+import MemoryQueryView from './views/MemoryQueryView.jsx';
 import ActivityView from './views/ActivityView.jsx';
 import SettingsView from './views/SettingsView.jsx';
 import { SECTIONS } from './sections.js';
@@ -84,6 +85,15 @@ export default function App() {
     view = (
       <SkillsView
         refreshKey={manualRefreshKey}
+        onOpenDoc={(path) => {
+          setDocRequest({ path, key: Date.now() });
+          setSectionId('documentation');
+        }}
+      />
+    );
+  } else if (sectionId === 'memory-query') {
+    view = (
+      <MemoryQueryView
         onOpenDoc={(path) => {
           setDocRequest({ path, key: Date.now() });
           setSectionId('documentation');

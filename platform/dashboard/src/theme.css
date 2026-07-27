@@ -1437,3 +1437,31 @@ svg.growth {
   color: var(--accent-2);
   font-size: 10px;
 }
+
+/* ---- memory query (deterministic wiki tag recall) ---- */
+
+.mq-search-box {
+  margin-bottom: 14px;
+}
+
+.mq-tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0;
+}
+
+.mq-tag-chip {
+  cursor: pointer;
+}
+
+.mq-tag-chip:hover {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.mq-handoff {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
