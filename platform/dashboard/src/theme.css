@@ -689,7 +689,6 @@ svg.growth {
 .badge.kind-wiki { color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 50%, transparent); }
 .badge.kind-raw { color: var(--accent-2); border: 1px solid var(--accent); }
 .badge.kind-template { color: var(--dim); border: 1px solid var(--line); }
-.badge.kind-dashboard { color: var(--dim); border: 1px solid var(--line); }
 .badge.kind-skill { color: var(--text); border: 1px solid color-mix(in srgb, var(--text) 35%, transparent); }
 .badge.kind-root { color: var(--muted); border: 1px solid var(--line); }
 

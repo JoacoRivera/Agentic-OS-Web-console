@@ -55,8 +55,8 @@ test('executable entries are exactly the permanent allowlist plus flagged migrat
     }
     assert.equal(op.executableInPhase, 3);
   }
-  // check:hud-parity was retired by the HUD-deprecation sign-off (ADR-0002,
-  // 2026-07-04): gone from the catalog, never in the permanent allowlist.
+  // check:hud-parity was retired on 2026-07-04 (ADR-0002): gone from the
+  // catalog, never in the permanent allowlist.
   assert.equal(executable.find((op) => op.id === 'check:hud-parity'), undefined);
   assert.ok(!EXECUTABLE_ALLOWLIST.includes('check:hud-parity'));
 });

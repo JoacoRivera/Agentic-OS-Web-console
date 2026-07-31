@@ -10,7 +10,6 @@ const KIND_LABELS = {
   wiki: 'Wiki',
   raw: 'Raw',
   template: 'Templates',
-  dashboard: 'Dashboards',
   skill: 'Skills',
 };
 

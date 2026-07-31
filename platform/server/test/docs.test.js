@@ -6,6 +6,7 @@ import path from 'node:path';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { createConfig } from '../src/config.js';
+import { sourceKind } from '../src/docs.js';
 
 // Fixture repo (deterministic counts, not the live evolving repo).
 let root;
@@ -52,6 +53,10 @@ test('GET /api/docs/tree tags every node with the correct source kind', async ()
   const all = flatten(res.body.roots);
   const byPath = Object.fromEntries(all.map((n) => [n.path, n]));
 
+  assert.deepEqual(
+    res.body.roots.map((node) => node.path),
+    ['AGENTS.md', 'wiki', 'raw', 'templates', '.claude/skills']
+  );
   assert.equal(byPath['AGENTS.md'].source, 'root');
   assert.equal(byPath['AGENTS.md'].type, 'file');
   assert.equal(byPath['wiki'].source, 'wiki');
@@ -60,8 +65,10 @@ test('GET /api/docs/tree tags every node with the correct source kind', async ()
   assert.equal(byPath['wiki/projects/proj.md'].source, 'wiki');
   assert.equal(byPath['raw/examples/capture.md'].source, 'raw');
   assert.equal(byPath['templates/t.md'].source, 'template');
-  assert.equal(byPath['dashboards/d.md'].source, 'dashboard');
   assert.equal(byPath['.claude/skills/aos-ingest/SKILL.md'].source, 'skill');
+  assert.equal(byPath['dashboards'], undefined);
+  assert.equal(byPath['dashboards/d.md'], undefined);
+  assert.equal(sourceKind('dashboards/d.md'), null);
 });
 
 test('tree lists folders and .md files only, and omits missing roots', async () => {

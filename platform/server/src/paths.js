@@ -9,7 +9,6 @@ export const ALLOWED_ROOTS = [
   'wiki',
   'raw',
   'templates',
-  'dashboards',
   '.claude/skills',
   'AGENTS.md',
 ];

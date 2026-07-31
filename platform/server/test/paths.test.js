@@ -8,6 +8,7 @@ const ROOT = '/repo';
 test('resolves paths inside allowed roots', () => {
   assert.equal(safeResolve(ROOT, 'wiki/index.md'), path.join(ROOT, 'wiki/index.md'));
   assert.equal(safeResolve(ROOT, 'raw/projects/x.md'), path.join(ROOT, 'raw/projects/x.md'));
+  assert.equal(safeResolve(ROOT, 'templates/page.md'), path.join(ROOT, 'templates/page.md'));
   assert.equal(safeResolve(ROOT, 'AGENTS.md'), path.join(ROOT, 'AGENTS.md'));
   assert.equal(
     safeResolve(ROOT, '.claude/skills/ingest/SKILL.md'),
@@ -28,7 +29,14 @@ test('rejects absolute paths (POSIX, Windows, UNC)', () => {
 });
 
 test('rejects paths outside the allowed roots even when inside the repo', () => {
-  for (const p of ['secrets.md', 'platform/server/src/config.js', '.claude/settings.json', 'wikis/x.md']) {
+  for (const p of [
+    'secrets.md',
+    'platform/server/src/config.js',
+    '.claude/settings.json',
+    'wikis/x.md',
+    'dashboards',
+    'dashboards/aos-hud.js',
+  ]) {
     assert.throws(() => safeResolve(ROOT, p), PathSafetyError, p);
   }
 });
@@ -45,6 +53,6 @@ test('rejects non-strings, empty strings, and NUL bytes', () => {
   }
 });
 
-test('allowed roots match the plan', () => {
-  assert.deepEqual(ALLOWED_ROOTS, ['wiki', 'raw', 'templates', 'dashboards', '.claude/skills', 'AGENTS.md']);
+test('allowed roots match the active memory-repo surface', () => {
+  assert.deepEqual(ALLOWED_ROOTS, ['wiki', 'raw', 'templates', '.claude/skills', 'AGENTS.md']);
 });

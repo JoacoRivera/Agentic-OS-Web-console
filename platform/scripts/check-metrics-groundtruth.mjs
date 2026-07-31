@@ -2,13 +2,12 @@
 // Boots the real server, fetches /api/metrics over HTTP, and compares it
 // field-by-field against an INDEPENDENT filesystem recount implemented here
 // from the documented rules (skip basenames index|log|_template|README;
-// `all` = wiki+raw+templates+dashboards minus _template only; captures under
+// `all` = wiki+raw+templates minus _template only; captures under
 // raw `examples/` approved via a plain `Status:` body line; health from the
 // first `lint` entry in wiki/log.md; knowledge intake deduplicated by explicit
 // `source_id` / `knowledge_intake_date` / `promoted_from` lineage). It
-// deliberately does NOT import
-// `server/src/metrics.js` and does NOT reference `dashboards/aos-hud.js` —
-// the filesystem is the source of truth, not the deprecated HUD.
+// deliberately does NOT import `server/src/metrics.js`; the active filesystem
+// roots are the source of truth.
 //
 // Independence is a property of the *algorithm*, not just of the file: the
 // lineage graph is settled bottom-up here against the producer's top-down
@@ -352,7 +351,7 @@ async function recount() {
   const rawAll = listMd('raw');
   const wiki = wikiAll.filter((p) => !SKIP.has(base(p)));
   const raw = rawAll.filter((p) => !SKIP.has(base(p)));
-  const allFiles = [...wikiAll, ...rawAll, ...listMd('templates'), ...listMd('dashboards')].filter(
+  const allFiles = [...wikiAll, ...rawAll, ...listMd('templates')].filter(
     (p) => base(p) !== '_template'
   );
 

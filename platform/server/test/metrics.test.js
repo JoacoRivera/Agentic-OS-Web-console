@@ -265,19 +265,20 @@ after(async () => {
   await fs.rm(problemCap, { recursive: true, force: true });
 });
 
-test('scalar counts follow the HUD skip/count rules', () => {
+test('scalar counts follow the canonical skip/count rules', () => {
   assert.equal(metrics.wikiN, 6); // page-a, promoted-item, proj-a, deep, flow-a, ex-1
   assert.equal(metrics.rawN, 9); // 10 raw pages minus README; .gitkeep never a page
   assert.equal(metrics.examples, 1); // ex-1
-  assert.equal(metrics.projects, 2); // proj-a + nested/deep, no skip filter (HUD)
+  assert.equal(metrics.projects, 2); // proj-a + nested/deep, no skip filter
   assert.equal(metrics.workflows, 1); // flow-a; ex-1 is an example, not a workflow
   assert.equal(metrics.rawProj, 6); // proj-raw + the five captures
   assert.equal(metrics.rawFlow, 1);
 });
 
-test('`all` counts files across tiers, keeps index/log/README, drops only _template', () => {
-  // 9 wiki + 10 raw + 2 templates + 1 dashboards = 22, minus the two _template
-  assert.equal(metrics.all, 20);
+test('`all` counts active memory tiers and ignores the retired dashboards root', () => {
+  // 9 wiki + 10 raw + 2 templates = 21, minus the two _template.
+  // The residual dashboards fixture must not contribute.
+  assert.equal(metrics.all, 19);
 });
 
 test('`all` double-counts a promoted item (raw source AND wiki synthesis, ADR-0003)', async () => {
@@ -309,7 +310,7 @@ test('knowledge intake deduplicates promotions by explicit lineage', () => {
   });
 });
 
-test('captures: approval via the HUD status regex (inline, list item, frontmatter)', () => {
+test('captures: approval via the canonical status rule (inline, list item, frontmatter)', () => {
   assert.equal(metrics.capN, 5);
   assert.equal(metrics.apprN, 3);
   assert.equal(metrics.draftN, 2);
@@ -330,7 +331,7 @@ test('drafts[] is capped by DRAFT_LIMIT; draftN still counts the whole queue', a
   );
 });
 
-test('isApprovedText matches the HUD regex exactly', () => {
+test('isApprovedText applies the first status marker exactly', () => {
   assert.equal(isApprovedText('Status: Approved'), true);
   assert.equal(isApprovedText('  status :  approved'), true);
   assert.equal(isApprovedText('Status:\n- Approved'), true);
@@ -383,7 +384,7 @@ test('health comes from the FIRST lint entry in wiki/log.md', () => {
   assert.equal(metrics.health.staleDays, 7);
 });
 
-test('gauge targets use the HUD target() helper', () => {
+test('gauge targets use the canonical target helper', () => {
   assert.equal(target(0), 5);
   assert.equal(target(4), 5);
   assert.equal(target(5), 10); // strictly above v

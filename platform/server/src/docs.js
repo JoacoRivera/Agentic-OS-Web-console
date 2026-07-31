@@ -20,7 +20,6 @@ export const DOC_ROOTS = [
   { root: 'wiki', source: 'wiki' },
   { root: 'raw', source: 'raw' },
   { root: 'templates', source: 'template' },
-  { root: 'dashboards', source: 'dashboard' },
   { root: '.claude/skills', source: 'skill' },
 ];
 

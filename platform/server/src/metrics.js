@@ -4,16 +4,16 @@ import matter from 'gray-matter';
 
 /**
  * Canonical memory metrics (ADR-0002): a live filesystem scan. Scalar file
- * counts retain the original HUD definitions, while the growth series uses
- * explicit intake lineage (ADR-0003 amendment) and therefore measures
+ * counts use the console contract, while the growth series uses explicit
+ * intake lineage (ADR-0003 amendment) and therefore measures
  * distinct knowledge sources rather than repository paths.
  *
- * The HUD counts Dataview *pages*, i.e. markdown files; `.gitkeep` (and any
- * non-.md file) is never a page.
+ * Counts operate on Markdown files; `.gitkeep` (and any non-.md file) is
+ * never a page.
  */
 
 const SKIP_BASENAMES = new Set(['index', 'log', '_template', 'README']);
-const SCAN_ROOTS = ['wiki', 'raw', 'templates', 'dashboards'];
+const SCAN_ROOTS = ['wiki', 'raw', 'templates'];
 const GROWTH_DAYS = 30;
 const WEEK_DAYS = 7;
 const LINEAGE_PROBLEM_LIMIT = 20;
@@ -37,9 +37,8 @@ const LINEAGE_REASON = Object.freeze({
 /**
  * Approval marker for a capture: a plain single-colon `Status:` body line
  * (inline `Status: Approved` or a following list item `Status:\n- Approved`).
- * Exact HUD regex. Applied to the *full* file text — frontmatter included,
- * which also covers the HUD's Dataview-field check, since a frontmatter
- * `status:` line is the first match the regex can find.
+ * Applied to the *full* file text, including frontmatter; the first matching
+ * `status:` line determines the result.
  */
 const APPROVED_RE = /^[ \t]*status[ \t]*:[ \t]*(?:\r?\n[ \t]*)*(?:[-*][ \t]*)?([a-z]+)/im;
 
@@ -48,7 +47,7 @@ export function isApprovedText(text) {
   return !!m && m[1].toLowerCase() === 'approved';
 }
 
-/** HUD gauge target: next multiple of 5 strictly above v, floor 5. */
+/** Gauge target: next multiple of 5 strictly above v, floor 5. */
 export function target(v) {
   return Math.max(5, Math.ceil((v + 1) / 5) * 5);
 }
@@ -347,7 +346,7 @@ export async function computeMetrics(config, now = new Date()) {
   const rootPages = await Promise.all(SCAN_ROOTS.map((root) => collectPages(repoRoot, root)));
   const byRoot = Object.fromEntries(SCAN_ROOTS.map((root, i) => [root, rootPages[i]]));
 
-  // ---- scalar counts (HUD collection rules; raw metrics always computed,
+  // ---- scalar counts (canonical console rules; raw metrics always computed,
   // regardless of EXPOSE_RAW_CONTENT — that flag gates content, ADR-0005) ----
   const wiki = byRoot.wiki.filter((p) => !skip(p));
   const raw = byRoot.raw.filter((p) => !skip(p) && p.name !== '.gitkeep');

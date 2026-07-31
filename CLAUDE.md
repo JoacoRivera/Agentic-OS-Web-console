@@ -25,11 +25,12 @@ The design record still governs the code and is where intent is settled:
 A **localhost-only web console** for the "Agentic OS" — a separate repo that is a Markdown
 memory wiki (`raw/` captures → polished `wiki/`) operated by an LLM harness. This console
 reads that repo's filesystem **live** to surface memory metrics, browse docs, and check
-workflow/skill completeness. It becomes the **canonical** metrics implementation, replacing
-the existing Obsidian HUD (`dashboards/aos-hud.js`), which is being deprecated (ADR-0002).
+workflow/skill completeness. It is the **canonical** metrics implementation. The legacy
+Obsidian HUD files and CSS snippet were removed from the memory repo on 2026-07-30
+(ADR-0002 amendment).
 
-The console runs at `platform/` *inside the Agentic OS repo*; repo root resolves to
-`../../..` from `platform/server/src/paths.js`.
+The console runs from this separate repository; `REPO_ROOT` points at the Agentic OS
+memory repo (see `platform/.env.example`).
 
 ## Hard invariants (do not violate)
 
@@ -43,9 +44,9 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
    not shell out to headless Claude or pretend a Skill is an npm script. The Phase-3
    executable allowlist contains **only** deterministic checks (`npm run verify`,
    `check:paths`, `check:docs`, `check:workflows`, `check:skills`, `check:metrics-groundtruth`).
-   `check:hud-parity` was a **temporary** migration gate, retired by the HUD-deprecation
-   sign-off of 2026-07-04 (ADR-0002 amendment) — do not reintroduce it; the permanent
-   allowlist must not depend on `dashboards/aos-hud.js` (ADR-0001/0002).
+   `check:hud-parity` was a **temporary** migration gate and was retired on 2026-07-04
+   (ADR-0002 amendment). The legacy files were removed on 2026-07-30; do not reintroduce
+   that check or treat `dashboards/` as a docs, path-safety, or metrics root.
 
 2. **Loopback bind + Host/Origin defense + auth-gating are mandatory** (ADR-0005). Server
    defaults to `HOST=127.0.0.1` and calls `listen(PORT, HOST)`. A non-loopback `HOST` without
@@ -58,7 +59,8 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
    is gated by `EXPOSE_RAW_CONTENT` (default **`false`**); raw **metrics** are always computed
    internally. **Path safety (`paths.safeResolve` rejecting `..`/absolute/outside-root)
    prevents reading outside allowed roots; it does NOT make those roots safe to expose** —
-   these are two different problems.
+   these are two different problems. The allowed roots are `wiki/`, `raw/`, `templates/`,
+   `.claude/skills/`, and `AGENTS.md`.
 
 3. **Knowledge growth uses explicit lineage** (ADR-0003, amended 2026-07-27).
    An origin declares `source_id` + `knowledge_intake_date`; a derived wiki page declares

@@ -15,6 +15,12 @@ Date: 2026-06-29
 > `server/src/gitdates.js` no longer exists. Passages describing that design are kept as the
 > record of what was decided on 2026-06-29, not as the current contract. The live follow-up
 > plan is `odysseus-web-console-next-2026-07-04.md`.
+>
+> **Retirement note — 2026-07-30.** The memory repo removed
+> `dashboards/Agentic OS Dashboard.md`, `dashboards/aos-hud.js`, and
+> `.obsidian/snippets/agentic-dashboard.css`. Every HUD/dashboard-root passage below records
+> the 2026-06-29 migration design only. The current console does not scan, expose, allow, or
+> classify `dashboards/`; see ADR-0002's 2026-07-30 amendment.
 
 ## Context
 

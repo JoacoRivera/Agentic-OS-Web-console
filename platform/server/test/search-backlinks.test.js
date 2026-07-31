@@ -32,8 +32,8 @@ before(async () => {
       'External: [example](https://example.com/manual-operations.md).\n'
   );
   await write(
-    'dashboards/hud.md',
-    '# HUD\n\nWikilink: [[manual-operations]] and heading form [[manual-operations#session-close]]\n' +
+    'templates/linking-template.md',
+    '# Linking template\n\nWikilink: [[manual-operations]] and heading form [[manual-operations#session-close]]\n' +
       'Alias form: [[manual-operations|the runbook]]. Unrelated: [[other-page]].\n'
   );
   await write(
@@ -43,7 +43,7 @@ before(async () => {
       '[ops]: workflows/manual-operations.md\n[ext]: https://example.com/\n'
   );
   await write('wiki/collisions/duplicate.md', '# Duplicate A\n\n');
-  await write('dashboards/duplicate.md', '# Duplicate B\n\n');
+  await write('templates/duplicate.md', '# Duplicate B\n\n');
   await write('wiki/collisions/ambiguous-link.md', '# Ambiguous\n\n[[duplicate]]\n');
   await write(
     'raw/examples/capture.md',
@@ -130,9 +130,9 @@ test('backlinks resolve relative, up-dir, root-relative, anchor, and wikilink fo
   assert.ok(byPath['wiki/projects/proj.md'], '../ relative link not resolved');
   // proj.md's external https link must not count as a second hit.
   assert.equal(byPath['wiki/projects/proj.md'].count, 1);
-  assert.ok(byPath['dashboards/hud.md'], 'wikilink not resolved');
+  assert.ok(byPath['templates/linking-template.md'], 'wikilink not resolved');
   // [[manual-operations]] + [[manual-operations#session-close]] + alias form.
-  assert.equal(byPath['dashboards/hud.md'].count, 3);
+  assert.equal(byPath['templates/linking-template.md'].count, 3);
 });
 
 test('backlinks resolve reference-style links (full and collapsed forms)', async () => {

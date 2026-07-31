@@ -9,9 +9,9 @@
  *   (live since 2026-07-04): dry-run first, explicit confirm, single-flight,
  *   audited — see executor.js for the safety model.
  *
- * The `check:hud-parity` migration gate was retired by the human
- * HUD-deprecation sign-off of 2026-07-04 (ADR-0002 amendment); the
- * `migrationOnly` escape hatch remains for any future migration gate.
+ * The historical `check:hud-parity` migration gate was retired on
+ * 2026-07-04 (ADR-0002 amendment); the `migrationOnly` escape hatch remains
+ * for any future migration gate.
  *
  * Phase 2: guided operations may declare `params` — structured fill-ins for
  * the command preview. Each param's `<name>` token appears literally in
@@ -239,7 +239,7 @@ const EXECUTABLE_OPERATIONS = [
     id: 'check:metrics-groundtruth',
     title: 'Metrics ground-truth check',
     description:
-      'Console metrics vs an independent filesystem recount — the permanent correctness check (no aos-hud.js dependency).',
+      'Console metrics vs an independent recount of wiki/, raw/, and templates/ — the permanent correctness check.',
     commandPreview: 'npm run check:metrics-groundtruth',
   },
 ];

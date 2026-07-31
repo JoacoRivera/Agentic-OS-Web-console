@@ -22,6 +22,8 @@ const MUST_REJECT = [
   'secrets/keys.md', // inside the repo, outside the allowed roots
   '.claude/settings.json', // sibling of an allowed root, not inside it
   'AGENTS.md.bak', // prefix of an allowed root is not the root
+  'dashboards',
+  'dashboards/aos-hud.js', // retired root is outside the active console surface
 ];
 
 const MUST_ACCEPT = [
@@ -30,7 +32,6 @@ const MUST_ACCEPT = [
   'wiki/workflows/task-modes.md',
   'raw/projects/x.md',
   'templates/page.md',
-  'dashboards/aos-hud.js',
   '.claude/skills/aos-ingest/SKILL.md',
 ];
 

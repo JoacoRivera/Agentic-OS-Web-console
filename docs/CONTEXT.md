@@ -24,23 +24,24 @@ _Avoid_: note, doc, treating rawN as unprocessed backlog, raw→wiki burndown fr
 
 **Canonical metrics implementation**:
 The single source of truth for memory metrics — the **web console** (`platform/server`).
-The Obsidian HUD (`dashboards/`) is a **migration reference only**, not a long-term peer;
-it is deprecated once the web console is trusted.
-_Avoid_: "both dashboards are authoritative" (false), HUD-as-source-of-truth
+The earlier Obsidian HUD was used only as a migration reference and was removed from the
+memory repo on 2026-07-30.
+_Avoid_: "both dashboards are authoritative" (false), treating `dashboards/` as active
 
 **check:metrics-groundtruth**:
 The **permanent** executable check that compares `/api/metrics` against an *independent
 filesystem recount* (the same skip/count rules, recomputed directly). The filesystem is the
-permanent source of truth, so this check is permanent and in the Phase-3 allowlist. It must
-**not** depend on `dashboards/aos-hud.js`. (Renamed from the old `check:metrics-parity`,
-which conflated ground-truth correctness with HUD migration — ADR-0002.)
-_Avoid_: check:metrics-parity (conflated name), making it depend on the HUD
+permanent source of truth, so this check is permanent and in the Phase-3 allowlist. It
+recounts the active metric roots: `wiki/`, `raw/`, and `templates/`. It was renamed from
+the old `check:metrics-parity`, which conflated ground-truth correctness with the completed
+HUD migration (ADR-0002).
+_Avoid_: check:metrics-parity (conflated name), scanning retired roots
 
 **check:hud-parity**:
 The **temporary migration gate** that compared the web console against the Obsidian HUD
-*during migration only*. The HUD was a migration **oracle**, not a peer. **Retired** by the
-human HUD-deprecation sign-off of 2026-07-04 (ADR-0002 amendment), after its final run
-passed against the live repo; the check no longer exists in the codebase.
+*during migration only*. The HUD was a migration **oracle**, not a peer. The check was
+retired on 2026-07-04 (ADR-0002 amendment), after its final run passed against the live
+repo; the legacy HUD files were then removed on 2026-07-30.
 _Avoid_: reintroducing it, treating HUD parity as a permanent invariant, or putting it in the permanent allowlist
 
 ### Memory lineage dates
@@ -107,7 +108,8 @@ Repository file totals remain separate operational inventory.
 **Path safety prevents reading *outside* the allowed roots. It does not make the allowed
 roots safe to *expose*.** Loopback bind and auth-gating are mandatory safety boundaries,
 not recommendations. Non-localhost without auth is *invalid configuration* — the server
-must refuse to start.
+must refuse to start. The active allowed roots are `wiki/`, `raw/`, `templates/`,
+`.claude/skills/`, and `AGENTS.md`; `dashboards/` is outside the console surface.
 
 ### Things the user can act on
 

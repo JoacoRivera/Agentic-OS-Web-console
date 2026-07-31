@@ -22,7 +22,7 @@ yet) — see ADR-0005.
 | `npm run check:docs`  | Docs tree/read/search/backlinks + raw gating against the live repo |
 | `npm run check:workflows` | Registry inclusion + status roll-up vs an independent recount (ADR-0006/0007) |
 | `npm run check:skills` | Skill registry vs an independent directory recount — no phantom skill |
-| `npm run check:metrics-groundtruth` | `/api/metrics` vs an independent filesystem recount (permanent check, ADR-0002; no `aos-hud.js` dependency) |
+| `npm run check:metrics-groundtruth` | `/api/metrics` vs an independent recount of the active filesystem roots (permanent check, ADR-0002) |
 
 ## Configuration (env)
 
@@ -42,10 +42,10 @@ so copy `.env.example` to `.env` once (it sets `REPO_ROOT=~/agents/agentic-os`) 
 ## Metrics (`GET /api/metrics`)
 
 The **canonical** memory-metrics implementation (ADR-0002): a live filesystem scan per
-request (no cache — refresh is "fetch again"), porting the exact HUD definitions. Skip
+request (no cache — refresh is "fetch again"), using the console metric contract. Skip
 basenames `index|log|_template|README`; counts `wikiN` (published memory — the headline),
 `rawN` (append-only raw capture archive, **not** a backlog), `all` (files across
-wiki+raw+templates+dashboards minus `_template`; **double-counts a promoted item** — never
+wiki+raw+templates minus `_template`; **double-counts a promoted item** — never
 "total memory"), `examples`, `projects`, `workflows`, `rawProj`, `rawFlow`; captures
 `capN`/`draftN`/`apprN` + `drafts[]`; `knowledgeN` plus lineage coverage; a 30-day
 knowledge-intake `series` keyed on explicit `source_id` + `knowledge_intake_date`
@@ -91,16 +91,15 @@ doesn't apply. Editorial niceties (examples, "when to use", related skill, usage
 reference) are informational-only. Per-workflow lookups use `?path=` — workflow paths
 contain slashes.
 
-## HUD deprecation (signed off 2026-07-04)
+## Legacy HUD retirement (completed 2026-07-30)
 
-This console is the **canonical** memory-metrics implementation; the Obsidian HUD
-(`dashboards/aos-hud.js`) is **deprecated** (ADR-0002, sign-off recorded in the ADR's
-amendment). The temporary `check:hud-parity` migration gate passed its final run against
-the live repo and was **retired with the sign-off** — removed from the scripts, the
-operations catalog, and the repo. The permanent correctness check is
-`check:metrics-groundtruth`, which recounts the filesystem independently and never touches
-`aos-hud.js`. The HUD files remain in the memory repo with a visible deprecation notice
-and receive no further changes.
+The console is the **canonical** memory-metrics implementation. The migration gate
+`check:hud-parity` passed its final run and was retired on 2026-07-04. On 2026-07-30 the
+memory repo removed `dashboards/Agentic OS Dashboard.md`, `dashboards/aos-hud.js`, and the
+associated Obsidian CSS snippet. Consequently `dashboards/` is neither a docs root, an
+allowed path root, nor a metrics scan root. The permanent correctness check is
+`check:metrics-groundtruth`, which independently recounts `wiki/`, `raw/`, and
+`templates/`.
 
 ## Guided operations (Phase 2, `GET /api/operations`)
 
@@ -152,5 +151,6 @@ local/manual — they need the memory repo.
   behind dry-run + explicit confirm (see Controlled execution above). No generic shell
   endpoint exists.
 - Client-supplied paths go through `paths.safeResolve` (rejects `..`, absolute paths,
-  anything outside the allowed roots). Path safety prevents reading outside the roots;
-  it does **not** make the roots safe to expose — those are two different problems.
+  anything outside `wiki/`, `raw/`, `templates/`, `.claude/skills/`, and `AGENTS.md`).
+  Path safety prevents reading outside the roots; it does **not** make the roots safe to
+  expose — those are two different problems.

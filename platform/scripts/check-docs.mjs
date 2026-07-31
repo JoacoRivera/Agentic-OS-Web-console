@@ -5,7 +5,14 @@
 //
 // Usage: REPO_ROOT=<memory repo> node scripts/check-docs.mjs
 import { createConfig } from '../server/src/config.js';
-import { buildDocsTree, readDocFile, searchDocs, findBacklinks, listDocFiles } from '../server/src/docs.js';
+import {
+  DOC_ROOTS,
+  buildDocsTree,
+  readDocFile,
+  searchDocs,
+  findBacklinks,
+  listDocFiles,
+} from '../server/src/docs.js';
 
 const config = createConfig({ ...process.env, EXPOSE_RAW_CONTENT: 'false' });
 
@@ -17,6 +24,11 @@ const record = (name, ok, detail = '') => {
 
 const tree = await buildDocsTree(config);
 record('tree returns roots[]', Array.isArray(tree.roots) && tree.roots.length > 0);
+record(
+  'docs roots match the active memory-repo surface',
+  DOC_ROOTS.map(({ root }) => root).join('|') ===
+    'AGENTS.md|wiki|raw|templates|.claude/skills'
+);
 
 const files = await listDocFiles(config);
 const wikiFile = files.find((f) => f.path.startsWith('wiki/') && f.path.endsWith('.md'))?.path;

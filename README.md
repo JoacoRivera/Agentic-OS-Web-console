@@ -151,14 +151,15 @@ Run flow:
 ## Metrics Notes
 
 `GET /api/metrics` is the canonical memory metrics implementation. It performs a live
-filesystem scan per request and does not depend on the deprecated Obsidian HUD. The
-permanent correctness check is `npm run check:metrics-groundtruth`.
+filesystem scan per request over `wiki/`, `raw/`, and `templates/`. The permanent
+correctness check is `npm run check:metrics-groundtruth`.
 
 Important metric terms:
 
 - `wikiN`: published long-term memory under `wiki/`.
 - `rawN`: append-only raw capture archive, not a backlog.
-- `all`: filesystem-wide count across memory areas; do not treat it as total memory.
+- `all`: Markdown-file count across `wiki/`, `raw/`, and `templates/`, excluding
+  `_template`; do not treat it as total memory.
 - `knowledgeN` and the 30-day growth series: distinct knowledge-intake sources, keyed on
   explicit frontmatter lineage (`source_id` + `knowledge_intake_date` on an origin,
   `promoted_from` on a derived page). A raw→wiki promotion resolves to its origin and adds
