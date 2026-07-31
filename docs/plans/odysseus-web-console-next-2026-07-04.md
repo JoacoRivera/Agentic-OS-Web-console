@@ -137,11 +137,13 @@ assertions.
 
 ## Cross-repo note (not console work)
 
-ADR-0003's TODO — true knowledge-intake growth needs lineage metadata
-(`knowledgeIntakeDate`, `wikiPublishDate`) as frontmatter conventions in the
-**memory repo**, plus a future ADR before the console may chart anything
-beyond `pathAddedDate`. Until that ADR exists, the growth chart stays labeled
-"Repository file growth" — no exceptions.
+Resolved 2026-07-27: ADR-0003 now defines explicit `source_id`,
+`knowledge_intake_date`, and `promoted_from` frontmatter lineage. The console
+charts distinct knowledge intake, excludes unlineaged/invalid files without a
+Git fallback, and exposes lineage coverage plus capped structural
+`{path, reason}` problems without raw content. The chart states whether lineage
+is complete or incomplete. Backfilling the memory repo remains a separate
+cross-repo migration.
 
 ## Standing non-goals (unchanged, load-bearing)
 

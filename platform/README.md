@@ -47,10 +47,21 @@ basenames `index|log|_template|README`; counts `wikiN` (published memory — the
 `rawN` (append-only raw capture archive, **not** a backlog), `all` (files across
 wiki+raw+templates+dashboards minus `_template`; **double-counts a promoted item** — never
 "total memory"), `examples`, `projects`, `workflows`, `rawProj`, `rawFlow`; captures
-`capN`/`draftN`/`apprN` + `drafts[]`; a 30-day `series` keyed on **`pathAddedDate`**
-(`git log --diff-filter=A`; repository *file* growth, not knowledge accumulation —
-ADR-0003); a 7-day `week` by mtime (`weekTotal`, `activeDays`); `recent`; `health` from
+`capN`/`draftN`/`apprN` + `drafts[]`; `knowledgeN` plus lineage coverage; a 30-day
+knowledge-intake `series` keyed on explicit `source_id` + `knowledge_intake_date`
+origins, with `promoted_from` pages resolving to those origins instead of counting
+again (ADR-0003); a 7-day `week` by mtime (`weekTotal`, `activeDays`); `recent`; `health` from
 the first `lint` entry in `wiki/log.md`; `targets` + `trend`.
+
+Lineage fields live in YAML frontmatter. Intake origins declare `source_id` and a bare,
+unquoted `knowledge_intake_date: YYYY-MM-DD`; timestamps, quoted dates, comments, invalid
+calendar dates, and future dates are invalid. Derived wiki pages declare `promoted_from`
+as one raw Markdown path or a list. Missing or invalid lineage is excluded rather than
+assigned a Git/mtime guess. `lineage` reports coverage counters plus at most 20
+deterministically ordered `{path, reason}` entries in `problems` (reason then path), with
+no file content. The chart states `Lineage incomplete` whenever
+`unlineagedN + invalidN > 0`, otherwise `Lineage complete`. See ADR-0003 for the stable
+reason codes, complete contract, and examples.
 
 ## Memory query (`GET /api/memory/query?topic=`)
 

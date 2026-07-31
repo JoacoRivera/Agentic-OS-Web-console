@@ -1,8 +1,8 @@
 /**
  * Doc link plumbing for the viewer (slice #9): a doc index built from the
  * tree, a remark step turning Obsidian wikilinks into link nodes, href
- * resolution for the custom `a` renderer, GitHub-style heading slugs, and
- * TOC extraction from raw markdown.
+ * resolution for the custom `a` renderer, GitHub-style heading slugs, and a
+ * rehype step stamping those slugs onto the rendered headings.
  */
 
 /** Flatten the docs tree into { paths:Set, byBasename:Map<lowercase base -> path|null> }. */
@@ -120,15 +120,57 @@ export function slugify(text) {
 }
 
 /**
- * GitHub-style slugger: repeated heading texts get -1, -2, … suffixes, in
- * document order. One instance per rendered doc.
+ * GitHub-style slugger: every returned slug is unique across the document,
+ * including collisions with generated -1, -2, … suffixes.
  */
 export function createSlugger() {
-  const seen = new Map();
+  const used = new Set();
   return (text) => {
     const base = slugify(text);
-    const n = seen.get(base) ?? 0;
-    seen.set(base, n + 1);
-    return n === 0 ? base : `${base}-${n}`;
+    let slug = base;
+    let suffix = 0;
+    while (used.has(slug)) {
+      slug = `${base}-${++suffix}`;
+    }
+    used.add(slug);
+    return slug;
+  };
+}
+
+/** Prefix for rendered heading element ids — namespaced so doc slugs can't collide with app ids. */
+export const HEADING_ID_PREFIX = 'doc-h-';
+
+/** Element id for a heading slug. The one place slug → DOM id is decided. */
+export function headingId(slug) {
+  return `${HEADING_ID_PREFIX}${slug}`;
+}
+
+const HEADING_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
+
+/** Plain text of a hast node: concatenate descendant text values. */
+function hastText(node) {
+  if (node.type === 'text') return node.value;
+  return (node.children ?? []).map(hastText).join('');
+}
+
+/**
+ * Rehype plugin: give every heading an id during rendering. It has to be a
+ * rehype step, not an effect — ids assigned imperatively after mount are lost
+ * on remount and are absent for any scroll that happens in the same commit.
+ * As part of the render they exist before paint and survive re-renders. One
+ * fresh slugger per transform keeps duplicate headings deterministic (-1, -2)
+ * in document order.
+ */
+export function rehypeHeadingIds() {
+  return (tree) => {
+    const slugFor = createSlugger();
+    const visit = (node) => {
+      if (node.type === 'element' && HEADING_TAGS.has(node.tagName)) {
+        node.properties = node.properties ?? {};
+        node.properties.id = headingId(slugFor(hastText(node)));
+      }
+      (node.children ?? []).forEach(visit);
+    };
+    visit(tree);
   };
 }

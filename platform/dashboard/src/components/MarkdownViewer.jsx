@@ -1,11 +1,28 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { CornerDownLeft, EyeOff, List } from 'lucide-react';
 import CopyButtons from './CopyButton.jsx';
-import { remarkWikilinks, resolveDocHref, slugify, createSlugger } from '../doclinks.js';
+import {
+  headingId,
+  rehypeHeadingIds,
+  remarkWikilinks,
+  resolveDocHref,
+  slugify,
+} from '../doclinks.js';
 
-/** Scroll a heading (by fragment) into view inside the rendered doc. */
+/** Scroll a heading into view by its rendered element id. */
+export function scrollToHeadingId(id) {
+  document.getElementById(id)?.scrollIntoView({ block: 'start' });
+}
+
+/**
+ * Scroll a heading by fragment. A fragment can be authored either as prose
+ * (`#Memory health cadence`, typical of wikilinks) or already slugged
+ * (`#related-1`, including a duplicate suffix), so try the slugified form
+ * first — that is GitHub's semantics and hits the first occurrence — then the
+ * literal form. No match: do nothing.
+ */
 export function scrollToFragment(fragment) {
   if (!fragment) return;
   let decoded = fragment;
@@ -14,7 +31,12 @@ export function scrollToFragment(fragment) {
   } catch {
     /* malformed escape — use as-is */
   }
-  document.getElementById(`doc-h-${slugify(decoded)}`)?.scrollIntoView({ block: 'start' });
+  for (const id of [headingId(slugify(decoded)), headingId(decoded)]) {
+    if (document.getElementById(id)) {
+      scrollToHeadingId(id);
+      return;
+    }
+  }
 }
 
 function DocLink({ href, children, currentPath, docIndex, onNavigate }) {
@@ -69,29 +91,27 @@ function DocLink({ href, children, currentPath, docIndex, onNavigate }) {
  * ADR-0005 notice, not an error.
  */
 export default function MarkdownViewer({ doc, error, loading, docIndex, backlinks, onNavigate }) {
-  const bodyRef = useRef(null);
+  // Callback ref, not useRef: the body element mounts in a later render than
+  // the one that sets `doc` (DocsView's fetch effect commits doc and loading
+  // separately), so a ref-based effect keyed on [doc] would read null and
+  // never re-run. State makes the element itself a dependency.
+  const [bodyEl, setBodyEl] = useState(null);
   const [toc, setToc] = useState([]);
 
-  // Assign heading ids + build the TOC from the *rendered* DOM: a fresh
-  // slugger per doc gives duplicate headings unique -1/-2 anchors, and the
-  // TOC can never drift from what react-markdown actually produced. Runs
-  // before paint (and before DocsView's fragment-scroll effect).
+  // Build the TOC by *reading* the rendered headings — ids come from the
+  // rehype step, so the TOC can never drift from what react-markdown
+  // produced. Runs before paint (and before DocsView's fragment scroll).
   useLayoutEffect(() => {
-    const el = bodyRef.current;
-    if (!doc || !el) {
+    if (!doc || !bodyEl) {
       setToc([]);
       return;
     }
-    const slugFor = createSlugger();
     const items = [];
-    for (const h of el.querySelectorAll('h1, h2, h3, h4')) {
-      const text = h.textContent.trim();
-      const slug = slugFor(text);
-      h.id = `doc-h-${slug}`;
-      items.push({ depth: Number(h.tagName[1]), text, slug });
+    for (const h of bodyEl.querySelectorAll('h1, h2, h3, h4')) {
+      items.push({ depth: Number(h.tagName[1]), text: h.textContent.trim(), id: h.id });
     }
     setToc(items);
-  }, [doc]);
+  }, [doc, bodyEl]);
 
   if (loading) {
     return <div className="placeholder-body">Loading doc…</div>;
@@ -144,9 +164,10 @@ export default function MarkdownViewer({ doc, error, loading, docIndex, backlink
               ))}
             </div>
           )}
-          <div className="markdown" ref={bodyRef}>
+          <div className="markdown" ref={setBodyEl}>
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkWikilinks]}
+              rehypePlugins={[rehypeHeadingIds]}
               components={{
                 a: ({ href, children }) => (
                   <DocLink
@@ -171,12 +192,12 @@ export default function MarkdownViewer({ doc, error, loading, docIndex, backlink
                 <List size={10} style={{ marginRight: 5, verticalAlign: -1 }} />
                 Contents
               </div>
-              {toc.map((h, i) => (
+              {toc.map((h) => (
                 <button
-                  key={`${h.slug}-${i}`}
+                  key={h.id}
                   className="doc-rail-row"
                   style={{ paddingLeft: (h.depth - 1) * 10 }}
-                  onClick={() => scrollToFragment(h.slug)}
+                  onClick={() => scrollToHeadingId(h.id)}
                   title={h.text}
                 >
                   {h.text}

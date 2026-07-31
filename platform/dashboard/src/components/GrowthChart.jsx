@@ -7,13 +7,17 @@ const BASE = TOP + PH;
 const AXIS_IDX = [0, 7, 14, 21, 29];
 
 /**
- * "Repository file growth" — cumulative file count by pathAddedDate (when
- * Git first saw the path). Deliberately NOT "knowledge accumulation": a
- * raw→wiki promotion adds a new path on the promotion date even though the
- * knowledge is older (ADR-0003). `all` double-counts promoted items.
+ * Cumulative distinct intake sources by explicit lineage metadata. A
+ * raw→wiki promotion resolves to the raw origin and adds no new event.
+ * Coverage is shown because unlineaged/invalid files are excluded rather
+ * than assigned a guessed date.
  */
 export default function GrowthChart({ metrics }) {
-  const { series, all, last30 } = metrics;
+  const { series, knowledgeN, lineage, last30 } = metrics;
+  const incompleteN = lineage.unlineagedN + lineage.invalidN;
+  const lineageState = incompleteN > 0
+    ? `Lineage incomplete · ${incompleteN} file${incompleteN === 1 ? '' : 's'} excluded`
+    : 'Lineage complete · all eligible files included';
   const days = series.length;
   const maxV = Math.max(...series.map((s) => s.v), 1);
   const X = (i) => (i / (days - 1)) * W;
@@ -26,12 +30,13 @@ export default function GrowthChart({ metrics }) {
   return (
     <div className="panel">
       <div className="label">
-        Repository file growth · 30d
+        Knowledge intake · 30d
         <span className="label-sub">
-          {all} files across tiers (double-counts promoted) · {last30} added last 30d
+          {knowledgeN} distinct sources · {last30} entered last 30d ·{' '}
+          {lineage.lineagedN}/{lineage.eligibleN} files lineaged · {lineageState}
         </span>
       </div>
-      <svg className="growth" viewBox={`0 0 ${W} ${BASE + 6}`} preserveAspectRatio="none">
+      <svg className="growth" viewBox={`0 0 ${W} ${BASE + 6}`} preserveAspectRatio="none" overflow="visible">
         <defs>
           <linearGradient id="growthFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.30" />

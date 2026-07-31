@@ -4,22 +4,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Current state
 
-This is a **design/planning-stage repo**. There is **no application code yet** — `backend/`
-and `frontend/` are empty placeholders, and there is no `package.json`, build, lint, or test
-setup. The substance lives entirely in `docs/`:
+The console is **implemented and running** through Phase 3. The code lives in the npm
+workspace at **`platform/`** (`server` = Express, `dashboard` = React+Vite); run everything
+from that directory: `npm install`, `npm run dev`, `npm run build`, `npm start`, `npm test`,
+`npm run verify`, and the `check:*` scripts in `platform/scripts/`. `platform/README.md`
+holds the implementation notes.
+
+The design record still governs the code and is where intent is settled:
 
 - `docs/CONTEXT.md` — the **ubiquitous language** (domain glossary + principles). Read this
   first; the terms below are load-bearing and must be used precisely.
-- `docs/plans/odysseus-web-console-2026-06-29.md` — the full implementation plan (target
-  layout, APIs, components, phasing, verification).
-- `docs/adr/0001..0006` — accepted architecture decisions. These are **binding invariants**,
+- `docs/plans/odysseus-web-console-2026-06-29.md` — the original implementation plan. It is a
+  **historical** document: where it disagrees with an ADR (notably the growth chart), the ADR
+  wins. `docs/plans/odysseus-web-console-next-2026-07-04.md` carries the live follow-up plan.
+- `docs/adr/0001..0007` — accepted architecture decisions. These are **binding invariants**,
   not suggestions.
-
-When implementing, the plan specifies a new top-level **`platform/`** directory (npm
-workspaces: `server` = Express, `dashboard` = React+Vite) — *not* the existing empty
-`backend/`/`frontend/` dirs. Follow the plan's `Target layout` section. The intended commands
-(once `platform/` exists) are `npm install`, `npm run dev`, `npm run build`, `npm start`, and
-`npm run verify` (a smoke-check script in `platform/scripts/verify.mjs`).
 
 ## What this project is
 
@@ -61,12 +60,13 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
    prevents reading outside allowed roots; it does NOT make those roots safe to expose** —
    these are two different problems.
 
-3. **The growth chart measures file growth, not knowledge** (ADR-0003). It is keyed on
-   `pathAddedDate` (when Git first saw the path via `git log --diff-filter=A`). Label it
-   "Repository file growth", never "knowledge accumulation". Three dates are deliberately
-   distinct and must never be collapsed: `knowledgeIntakeDate`, `wikiPublishDate`,
-   `pathAddedDate` (only the last is computable today). Promotion raw→wiki is *publishing*,
-   not new intake.
+3. **Knowledge growth uses explicit lineage** (ADR-0003, amended 2026-07-27).
+   An origin declares `source_id` + `knowledge_intake_date`; a derived wiki page declares
+   `promoted_from` and inherits the referenced raw origin(s). The chart counts distinct
+   valid source IDs once and labels itself "Knowledge intake". Missing/invalid lineage is
+   excluded and surfaced as counters plus capped `{path, reason}` problems — never guessed
+   from Git or mtime, and never exposing raw body content. `knowledgeIntakeDate` and
+   `wikiPublishDate` remain distinct. Promotion raw→wiki is *publishing*, not new intake.
 
 4. **"Platform Apps" is static frontend hosting only — and is deferred out of P1** (ADR-0004).
    When it exists it scans `platform/apps/*/dist` and `express.static`-mounts each, serving
@@ -113,7 +113,8 @@ Avoid the words "command"/"tool"/"task"/"runbook" as synonyms for these — the 
   explorer/search/backlinks, Workflow registry+checks, Skill registry, Odysseus visual shell.
 - **Phase 2** — Guided Operations (checklists + command previews, copy, no execution).
 - **Phase 3** — controlled execution: executable allowlist + dry-run + confirm + diff +
-  audit log. Until Phase 3, `POST /api/operations/:id/run` returns `501`.
+  audit log. Shipped: `POST /api/operations/:id/run` executes an allowlisted id after a
+  dry-run token, and refuses anything else (`405`) — it no longer returns the pre-P3 `501`.
 
 ## Visual style
 

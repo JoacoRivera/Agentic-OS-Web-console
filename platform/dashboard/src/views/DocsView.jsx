@@ -119,11 +119,14 @@ export default function DocsView({ refreshKey = 0, openRequest = null }) {
   }, [openRequest]);
 
   // Scroll to a #heading fragment once the navigated-to doc has rendered.
+  // `doc` is committed one render before `loading` clears, and the viewer
+  // shows a placeholder while loading — so wait for loading to end, or the
+  // headings do not exist yet and the scroll is silently dropped.
   useEffect(() => {
-    if (!doc || !pendingFragment.current) return;
+    if (loading || !doc || !pendingFragment.current) return;
     scrollToFragment(pendingFragment.current);
     pendingFragment.current = null;
-  }, [doc]);
+  }, [doc, loading]);
 
   // Debounced live search; empty query returns to the tree.
   useEffect(() => {

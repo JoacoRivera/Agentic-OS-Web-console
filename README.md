@@ -159,8 +159,25 @@ Important metric terms:
 - `wikiN`: published long-term memory under `wiki/`.
 - `rawN`: append-only raw capture archive, not a backlog.
 - `all`: filesystem-wide count across memory areas; do not treat it as total memory.
-- Growth series: file path growth based on `git log --diff-filter=A`, not knowledge
-  creation.
+- `knowledgeN` and the 30-day growth series: distinct knowledge-intake sources, keyed on
+  explicit frontmatter lineage (`source_id` + `knowledge_intake_date` on an origin,
+  `promoted_from` on a derived page). A raw→wiki promotion resolves to its origin and adds
+  no intake event. There is no Git or mtime fallback: files without valid lineage are
+  excluded, never guessed (ADR-0003).
+- `lineage`: coverage of that keying — `eligibleN` / `lineagedN` / `unlineagedN` /
+  `invalidN` / `promotedN` plus conflicting- and future-dated-source counts.
+  `lineage.problems` exposes at most 20 deterministic `{path, reason}` diagnostics,
+  ordered by reason then path, and never includes file content. Stable reason codes are
+  `invalid-frontmatter`, `missing-lineage`, `partial-origin`, `origin-and-promotion`,
+  `invalid-source-id`, `invalid-intake-date`, `future-intake-date`,
+  `conflicting-source-id`, `unsafe-promoted-from`, `missing-promoted-from`,
+  `invalid-promoted-from-lineage`, `promotion-cycle`, and `unreadable-file`. Until the
+  memory repo is fully backfilled, `knowledgeN` is a floor, not total memory.
+
+`knowledge_intake_date` must be written as a bare `YYYY-MM-DD` calendar day. YAML would
+otherwise quietly accept `2026-07-14T09:30:00Z` as a date and turn `2026-02-30` into
+March 2, so the console validates the exact frontmatter source text and counts timestamps,
+quoted dates, comments, and invalid calendar days as invalid lineage.
 
 ## Security Model
 

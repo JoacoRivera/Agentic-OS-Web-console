@@ -4,9 +4,18 @@
 // from the documented rules (skip basenames index|log|_template|README;
 // `all` = wiki+raw+templates+dashboards minus _template only; captures under
 // raw `examples/` approved via a plain `Status:` body line; health from the
-// first `lint` entry in wiki/log.md). It deliberately does NOT import
+// first `lint` entry in wiki/log.md; knowledge intake deduplicated by explicit
+// `source_id` / `knowledge_intake_date` / `promoted_from` lineage). It
+// deliberately does NOT import
 // `server/src/metrics.js` and does NOT reference `dashboards/aos-hud.js` —
 // the filesystem is the source of truth, not the deprecated HUD.
+//
+// Independence is a property of the *algorithm*, not just of the file: the
+// lineage graph is settled bottom-up here against the producer's top-down
+// memoized recursion, and the 30-day curve is rebuilt point by point rather
+// than spot-checked at its endpoint. Both sides do share `gray-matter`, on
+// purpose — "is this frontmatter parseable at all" must mean the same thing to
+// the check and to the console, or every YAML edge case becomes a false alarm.
 //
 // Usage: REPO_ROOT=<memory repo> node scripts/check-metrics-groundtruth.mjs
 import { spawn } from 'node:child_process';
@@ -16,6 +25,7 @@ import http from 'node:http';
 import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import matter from 'gray-matter';
 
 const platformDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const serverEntry = path.join(platformDir, 'server', 'src', 'index.js');
@@ -75,6 +85,268 @@ async function captureApproved(relPath) {
   return false;
 }
 
+// ---------- lineage recount (bottom-up, deliberately unlike the producer) ----------
+// `metrics.js` resolves lineage top-down with a memoized recursive walk that
+// carries a `visiting` set to break cycles. This recount instead settles the
+// graph bottom-up: origins seed a resolved set, promotions are merged only once
+// every reference is already settled, and whatever never settles is by
+// definition inside a cycle (or hanging off an unresolvable ref). Two different
+// algorithms agreeing is evidence; one algorithm typed twice is not.
+
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+const PROBLEM_LIMIT = 20;
+const REASON = Object.freeze({
+  CONFLICTING_SOURCE_ID: 'conflicting-source-id',
+  FUTURE_INTAKE_DATE: 'future-intake-date',
+  INVALID_FRONTMATTER: 'invalid-frontmatter',
+  INVALID_INTAKE_DATE: 'invalid-intake-date',
+  INVALID_PROMOTED_FROM_LINEAGE: 'invalid-promoted-from-lineage',
+  INVALID_SOURCE_ID: 'invalid-source-id',
+  MISSING_LINEAGE: 'missing-lineage',
+  MISSING_PROMOTED_FROM: 'missing-promoted-from',
+  ORIGIN_AND_PROMOTION: 'origin-and-promotion',
+  PARTIAL_ORIGIN: 'partial-origin',
+  PROMOTION_CYCLE: 'promotion-cycle',
+  UNREADABLE_FILE: 'unreadable-file',
+  UNSAFE_PROMOTED_FROM: 'unsafe-promoted-from',
+});
+
+/** `YYYY-MM-DD` that survives a UTC round trip (no Feb 30, no month 13). */
+function calendarDay(day) {
+  if (typeof day !== 'string' || !DATE_ONLY.test(day)) return null;
+  const [y, m, d] = day.split('-').map(Number);
+  const back = new Date(Date.UTC(y, m - 1, d));
+  return back.getUTCFullYear() === y && back.getUTCMonth() === m - 1 && back.getUTCDate() === d
+    ? day
+    : null;
+}
+
+/** Map of top-level frontmatter key → exact raw scalar source text. */
+function scalarSources(text) {
+  const sources = new Map();
+  const lines = (text || '').split(/\r?\n/);
+  if (lines[0]?.trim() !== '---') return sources;
+  for (let i = 1; i < lines.length && lines[i].trim() !== '---'; i++) {
+    const line = lines[i];
+    if (/^\s/.test(line)) continue; // nested: not a top-level scalar
+    const colon = line.indexOf(':');
+    if (colon <= 0) continue;
+    const key = line.slice(0, colon).trim();
+    if (sources.has(key)) continue; // first wins, as YAML's duplicate-key resolution does
+    sources.set(key, line.slice(colon + 1).trim());
+  }
+  return sources;
+}
+
+/**
+ * An intake day is only valid when the *written* scalar was a bare calendar
+ * date. YAML silently promotes `2026-07-14T09:30:00Z` and `2025-02-30` to
+ * Dates, so the parsed value cannot be trusted on its own.
+ */
+function intakeDay(value, source) {
+  if (value === undefined || value === null) return null;
+  return calendarDay(source);
+}
+
+function safeRef(ref) {
+  if (typeof ref !== 'string') return null;
+  const cleaned = ref.trim().replaceAll('\\', '/');
+  if (cleaned === '' || cleaned.startsWith('/') || !cleaned.endsWith('.md')) return null;
+  if (!cleaned.startsWith('raw/') || cleaned.split('/').includes('..')) return null;
+  return path.posix.normalize(cleaned);
+}
+
+function lineageRecord(text) {
+  let file;
+  try {
+    file = matter(text);
+  } catch {
+    return { type: 'bad', reason: REASON.INVALID_FRONTMATTER };
+  }
+  const { data } = file;
+  const declares = (key) => Object.hasOwn(data, key);
+  const hasId = declares('source_id');
+  const hasDay = declares('knowledge_intake_date');
+
+  if (declares('promoted_from')) {
+    if (hasId || hasDay) return { type: 'bad', reason: REASON.ORIGIN_AND_PROMOTION };
+    const listed = Array.isArray(data.promoted_from) ? data.promoted_from : [data.promoted_from];
+    const refs = listed.map(safeRef);
+    if (refs.length === 0 || refs.includes(null)) {
+      return { type: 'bad', reason: REASON.UNSAFE_PROMOTED_FROM };
+    }
+    return { type: 'promotion', refs: [...new Set(refs)] };
+  }
+  if (!hasId && !hasDay) return { type: 'missing', reason: REASON.MISSING_LINEAGE };
+  if (hasId !== hasDay) return { type: 'bad', reason: REASON.PARTIAL_ORIGIN };
+  const id = typeof data.source_id === 'string' ? data.source_id.trim() : '';
+  if (!id) return { type: 'bad', reason: REASON.INVALID_SOURCE_ID };
+  const day = intakeDay(
+    data.knowledge_intake_date,
+    scalarSources(text).get('knowledge_intake_date') ?? null
+  );
+  return day
+    ? { type: 'source', id, day }
+    : { type: 'bad', reason: REASON.INVALID_INTAKE_DATE };
+}
+
+function todayLocal(when = new Date()) {
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${when.getFullYear()}-${pad(when.getMonth() + 1)}-${pad(when.getDate())}`;
+}
+
+async function recountLineage(paths) {
+  const records = new Map();
+  for (const relPath of paths) {
+    try {
+      records.set(relPath, lineageRecord(await fs.readFile(path.join(repoRoot, relPath), 'utf8')));
+    } catch {
+      records.set(relPath, { type: 'bad', reason: REASON.UNREADABLE_FILE });
+    }
+  }
+
+  // --- bottom-up settling ---
+  const settled = new Map(); // path -> Map(sourceId -> day)
+  const broken = new Map(); // path -> stable structural reason
+  for (const [relPath, record] of records) {
+    if (record.type === 'source') settled.set(relPath, new Map([[record.id, record.day]]));
+    else if (record.type === 'bad' || record.type === 'missing') {
+      broken.set(relPath, record.reason);
+    }
+  }
+  let pending = [...records].filter(([, r]) => r.type === 'promotion').map(([p]) => p);
+  for (let progress = true; progress; ) {
+    progress = false;
+    const stillPending = [];
+    for (const relPath of pending) {
+      const { refs } = records.get(relPath);
+      const missingRef = refs.find((ref) => !records.has(ref));
+      if (missingRef) {
+        broken.set(relPath, REASON.MISSING_PROMOTED_FROM);
+        progress = true;
+        continue;
+      }
+      const brokenRef = refs.find((ref) => broken.has(ref));
+      if (brokenRef) {
+        const target = records.get(brokenRef);
+        broken.set(
+          relPath,
+          target.type === 'promotion'
+            ? broken.get(brokenRef)
+            : REASON.INVALID_PROMOTED_FROM_LINEAGE
+        );
+        progress = true;
+        continue;
+      }
+      if (!refs.every((ref) => settled.has(ref))) {
+        stillPending.push(relPath);
+        continue;
+      }
+      const merged = new Map();
+      let clash = false;
+      for (const ref of refs) {
+        for (const [id, day] of settled.get(ref)) {
+          if (merged.has(id) && merged.get(id) !== day) clash = true;
+          merged.set(id, day);
+        }
+      }
+      if (clash) broken.set(relPath, REASON.CONFLICTING_SOURCE_ID);
+      else settled.set(relPath, merged);
+      progress = true;
+    }
+    pending = stillPending;
+  }
+  for (const relPath of pending) {
+    broken.set(relPath, REASON.PROMOTION_CYCLE); // never settled → cycle/dependent chain
+  }
+
+  // --- source-id level verdicts ---
+  const daysById = new Map();
+  for (const record of records.values()) {
+    if (record.type !== 'source') continue;
+    const days = daysById.get(record.id) ?? new Set();
+    days.add(record.day);
+    daysById.set(record.id, days);
+  }
+  const conflicts = new Set([...daysById].filter(([, d]) => d.size > 1).map(([id]) => id));
+  const today = todayLocal();
+  const future = new Set(
+    [...daysById].filter(([, d]) => d.size === 1 && [...d][0] > today).map(([id]) => id)
+  );
+  const invalidIds = new Set([...conflicts, ...future]);
+
+  const events = [...daysById]
+    .filter(([id, days]) => !invalidIds.has(id) && days.size === 1)
+    .map(([id, days]) => ({ id, day: [...days][0] }));
+
+  // --- file-level verdicts ---
+  let lineagedN = 0;
+  let unlineagedN = 0;
+  let invalidN = 0;
+  let promotedN = 0;
+  const problems = [];
+  for (const [relPath, record] of [...records].sort(([a], [b]) => (
+    a < b ? -1 : a > b ? 1 : 0
+  ))) {
+    if (record.type === 'missing') {
+      unlineagedN++;
+      problems.push({ path: relPath, reason: record.reason });
+      continue;
+    }
+    if (record.type === 'bad') {
+      invalidN++;
+      problems.push({ path: relPath, reason: record.reason });
+      continue;
+    }
+    const sources = settled.get(relPath);
+    let reason = broken.get(relPath) ?? null;
+    if (!reason && [...sources.keys()].some((id) => conflicts.has(id))) {
+      reason = REASON.CONFLICTING_SOURCE_ID;
+    }
+    if (!reason && [...sources.keys()].some((id) => future.has(id))) {
+      reason = REASON.FUTURE_INTAKE_DATE;
+    }
+    if (reason) {
+      invalidN++;
+      problems.push({ path: relPath, reason });
+      continue;
+    }
+    lineagedN++;
+    if (record.type === 'promotion') promotedN++;
+  }
+  problems.sort((a, b) => {
+    if (a.reason !== b.reason) return a.reason < b.reason ? -1 : 1;
+    return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
+  });
+
+  // --- 30-day cumulative series, walked over local calendar days ---
+  const anchor = new Date();
+  const dayAt = (offset) =>
+    todayLocal(new Date(anchor.getFullYear(), anchor.getMonth(), anchor.getDate() + offset));
+  const series = [];
+  for (let i = 29; i >= 0; i--) {
+    const d = dayAt(-i);
+    series.push({ d, v: events.reduce((n, e) => n + (e.day <= d ? 1 : 0), 0) });
+  }
+  const windowStart = dayAt(-29);
+
+  return {
+    knowledgeN: events.length,
+    series,
+    last30: events.filter((e) => e.day >= windowStart).length,
+    lineage: {
+      eligibleN: paths.length,
+      lineagedN,
+      unlineagedN,
+      invalidN,
+      promotedN,
+      conflictingSourceIdsN: conflicts.size,
+      futureDatedSourceIdsN: future.size,
+      problems: problems.slice(0, PROBLEM_LIMIT),
+    },
+  };
+}
+
 async function recount() {
   const wikiAll = listMd('wiki');
   const rawAll = listMd('raw');
@@ -85,6 +357,7 @@ async function recount() {
   );
 
   const captures = raw.filter(inExamples);
+  const lineage = await recountLineage([...wiki, ...raw]);
   let apprN = 0;
   for (const c of captures) if (await captureApproved(c)) apprN++;
 
@@ -117,6 +390,7 @@ async function recount() {
     capN: captures.length,
     apprN,
     draftN: captures.length - apprN,
+    ...lineage,
     lastLint,
     lintAge,
     healthStale: lintAge === null || lintAge >= 7,
@@ -180,15 +454,20 @@ try {
 
   const [console_, truth] = await Promise.all([getJson(port, '/api/metrics'), recount()]);
 
+  // A passing 30-point series prints as noise; only a mismatch needs the detail.
+  const brief = (value, full) => {
+    const text = JSON.stringify(value);
+    return full || text.length <= 160 ? text : `${text.slice(0, 160)}… (${text.length} chars)`;
+  };
   const check = (name, got, want) => {
     const ok = JSON.stringify(got) === JSON.stringify(want);
     if (!ok) failed++;
-    console.log(`${ok ? '✔' : '✖'} ${name}: console=${JSON.stringify(got)} recount=${JSON.stringify(want)}`);
+    console.log(`${ok ? '✔' : '✖'} ${name}: console=${brief(got, !ok)} recount=${brief(want, !ok)}`);
   };
 
   for (const f of [
     'wikiN', 'rawN', 'all', 'examples', 'projects', 'workflows',
-    'rawProj', 'rawFlow', 'capN', 'apprN', 'draftN',
+    'rawProj', 'rawFlow', 'capN', 'apprN', 'draftN', 'knowledgeN', 'last30',
   ]) {
     check(f, console_[f], truth[f]);
   }
@@ -196,11 +475,32 @@ try {
   check('health.lintAge', console_.health.lintAge, truth.lintAge);
   check('health.healthStale', console_.health.healthStale, truth.healthStale);
 
-  // series sanity: cumulative, non-decreasing, ends at today's `all`
-  const series = console_.series;
-  const monotonic = series.every((s, i) => i === 0 || s.v >= series[i - 1].v);
-  check('series is non-decreasing (30 pts)', { len: series.length, monotonic }, { len: 30, monotonic: true });
-  check('series ends at all', series[series.length - 1].v, truth.all);
+  // The whole 30-point curve, not just its endpoint: a wrong intake *date*
+  // moves points without moving the total.
+  check('series (30 × {d,v})', console_.series, truth.series);
+
+  // Coverage is a partition of the eligible files — every eligible file lands in
+  // exactly one bucket, so a silently dropped file cannot hide inside a total.
+  const counterFields = [
+    'eligibleN',
+    'lineagedN',
+    'unlineagedN',
+    'invalidN',
+    'promotedN',
+    'conflictingSourceIdsN',
+    'futureDatedSourceIdsN',
+  ];
+  const pickCounters = (lineage) => Object.fromEntries(
+    counterFields.map((field) => [field, lineage[field]])
+  );
+  const counts = console_.lineage;
+  check('lineage counters', pickCounters(counts), pickCounters(truth.lineage));
+  check('lineage.problems (exact, max 20)', counts.problems, truth.lineage.problems);
+  check(
+    'lineage partition lineagedN+unlineagedN+invalidN = eligibleN',
+    counts.lineagedN + counts.unlineagedN + counts.invalidN,
+    counts.eligibleN
+  );
 } catch (err) {
   failed++;
   console.error(`✖ ${err.message}`);

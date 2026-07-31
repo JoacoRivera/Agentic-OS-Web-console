@@ -1,28 +1,85 @@
-# Growth chart measures file growth (pathAddedDate), not knowledge intake
+# Knowledge growth uses explicit intake lineage
 
-The console's growth chart is keyed on `pathAddedDate` — when Git first saw the current
-file path (`git log --diff-filter=A`). This is **not** the date knowledge entered the
-system. We therefore label the chart "Repository file growth" / "Wiki/raw file growth" and
-explicitly do not claim it measures "knowledge accumulation".
+Status: accepted; amended 2026-07-27
 
-We decided this because the repo's core behavior — promoting `raw/` captures into `wiki/`
-via `/ingest` and `/promote-draft-memory` — makes a single "creation date" ambiguous.
-A promotion adds a new wiki path on the promotion date even though the knowledge was
-captured earlier; and Git may record a move as rename *or* delete+add depending on
-similarity detection, so Git history is not a reliable semantic source for memory creation.
+The console's growth chart is keyed on explicit semantic lineage. It counts distinct
+knowledge-intake sources by `knowledge_intake_date`, deduplicated by `source_id`.
+A published page that declares `promoted_from` resolves to its raw origin(s) and does
+not create another intake event.
 
 Three distinct dates exist: `knowledgeIntakeDate` (first entry, ~raw capture),
 `wikiPublishDate` (wiki doc created/promoted — publishing, not intake), and `pathAddedDate`
-(Git path add). Only the last is computable today.
+(Git path add). Only `knowledgeIntakeDate` drives the knowledge-growth series.
+
+## Lineage frontmatter
+
+An intake origin under `raw/` or `wiki/` declares both fields:
+
+```yaml
+---
+source_id: capture-2026-07-27-console-lineage
+knowledge_intake_date: 2026-07-27
+---
+```
+
+- `source_id` is a stable, repository-wide identifier for one intake event. Moving,
+  renaming, or publishing a file does not mint a new ID.
+- `knowledge_intake_date` is written with the exact bare source representation
+  `YYYY-MM-DD` for when that source first entered Agentic OS. Quoted values,
+  timestamps, inline comments, invalid calendar dates, and future dates are invalid;
+  the value is not inferred from Git or filesystem timestamps.
+
+A synthesized/published page derived from one or more raw sources declares
+`promoted_from` instead:
+
+```yaml
+---
+promoted_from:
+  - raw/projects/example/capture-2026-07-27.md
+wiki_publish_date: 2026-07-28
+---
+```
+
+- `promoted_from` is a raw repo-relative Markdown path or list of paths. The console
+  recursively inherits each referenced origin's source ID and intake date.
+- A derived page must not also declare `source_id` or `knowledge_intake_date`; that
+  would ambiguously claim both "new intake" and "derived publication".
+- `wiki_publish_date` is optional publishing metadata and is not used by the intake
+  series.
+- Multiple files may resolve to the same `source_id` and date; they count once.
+  A source ID declared with conflicting dates is invalid and excluded.
+
+Files with absent, partial, unsafe, unresolved, or conflicting lineage are excluded
+from knowledge metrics. `/api/metrics.lineage` reports eligible, lineaged,
+unlineaged, invalid, promoted, conflicting-source, and future-dated-source counts
+so an incomplete backfill remains visible. Its `problems` field exposes at most 20
+objects containing only `{path, reason}`, sorted by reason and then path. Stable reason
+codes are `invalid-frontmatter`, `missing-lineage`, `partial-origin`,
+`origin-and-promotion`, `invalid-source-id`, `invalid-intake-date`,
+`future-intake-date`, `conflicting-source-id`, `unsafe-promoted-from`,
+`missing-promoted-from`, `invalid-promoted-from-lineage`, `promotion-cycle`, and
+`unreadable-file`. There is deliberately no raw body content and no Git/mtime fallback:
+guessed history would turn an incomplete migration into false knowledge.
 
 ## Consequences
 
-- Phase 1: rename the chart to "Repository file growth"; use `pathAddedDate` only.
+- The chart is labeled "Knowledge intake" and its cumulative `series` ends at
+  `knowledgeN`, the distinct valid source count. It explicitly reports `Lineage
+  incomplete` when `unlineagedN + invalidN > 0` and `Lineage complete` when the sum
+  is zero.
 - Promotion raw → wiki counts as wiki publishing, never as new knowledge intake.
 - Do not rely on Git rename behavior as the semantic source of truth for creation.
-- TODO (future ADR): true knowledge-intake growth requires stable lineage metadata —
-  frontmatter `created`, `source_id`, `promoted_from`, or an ingest log. Until that exists,
-  no "knowledge accumulation" claim is made.
+- `pathAddedDate` is no longer a metrics input. Repository file counts remain
+  available separately for operational inventory.
+- Existing memory needs an explicit frontmatter backfill before it appears in the
+  intake series; the console does not edit or migrate the memory repo.
+
+## Prior decision
+
+Before the 2026-07-27 amendment, lineage metadata did not exist. The chart therefore
+used `pathAddedDate` and was correctly labeled "Repository file growth". That fallback
+is retired now that the lineage contract exists; it must not be reintroduced for
+unlineaged files.
 
 ## Scalar metrics (the same principle applies to the gauges, not just the chart)
 
@@ -40,6 +97,6 @@ published memory), **not** a left-to-right pipeline. The scalar stats must refle
   synthesis). Never present `all` as "total memory/knowledge".
 - **`draftN`** — unapproved captured examples (the review queue, drained by a `status` edit
   *inside the raw file*), **not** "unprocessed raw backlog". Promotion ≠ approval.
-- **No deduped "knowledge total"** (e.g. by basename) until lineage metadata exists — that is
-  the exact fakery this ADR forbids.
+- **`knowledgeN`** — distinct valid lineage sources, deduplicated by `source_id`.
+  This is the knowledge-intake total and excludes unlineaged/invalid files.
 - **No funnel/burndown visual** between `raw/` and `wiki/`; raw never decreases.

@@ -19,6 +19,9 @@
     "check:skills": "node --env-file-if-exists=.env scripts/check-skills.mjs",
     "check:metrics-groundtruth": "node --env-file-if-exists=.env scripts/check-metrics-groundtruth.mjs"
   },
+  "dependencies": {
+    "gray-matter": "^4.0.3"
+  },
   "engines": {
     "node": ">=22.9"
   }

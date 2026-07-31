@@ -7,6 +7,15 @@ Type: implementation-plan
 Date: 2026-06-29
 ---
 
+> **Historical plan — superseded in part.** The console described here is built. Where this
+> document disagrees with an accepted ADR, the ADR wins. In particular the growth chart was
+> re-specified by the **ADR-0003 amendment of 2026-07-27**: the series is keyed on explicit
+> intake lineage (`source_id` + `knowledge_intake_date`, `promoted_from`), the
+> `pathAddedDate` / `git log --diff-filter=A` design below was **retired**, and
+> `server/src/gitdates.js` no longer exists. Passages describing that design are kept as the
+> record of what was decided on 2026-06-29, not as the current contract. The live follow-up
+> plan is `odysseus-web-console-next-2026-07-04.md`.
+
 ## Context
 
 The Agentic OS repo has an Obsidian HUD dashboard (`dashboards/Agentic OS Dashboard.md`
@@ -69,7 +78,9 @@ platform/
       config.js           # tunable thresholds/limits (single source)
       paths.js            # central repo-root path safety (normalize, no .. / absolute)
       metrics.js          # live file scan -> metrics (ports aos-hud.js logic)
-      gitdates.js         # creation dates via one `git log` pass
+      gitdates.js         # RETIRED (ADR-0003 amendment): creation dates via one `git log`
+                          #   pass. Built, then deleted once lineage frontmatter replaced
+                          #   it; no module reads Git dates now.
       docs.js             # docs tree / file read / search / backlinks
       workflows.js        # workflow registry + completeness checks
       skills.js           # repo-local skill registry (scans .claude/skills/)
@@ -138,20 +149,25 @@ content stays hidden unless auth **and** explicit `EXPOSE_RAW_CONTENT=true` are 
   - **captures** (raw files under `examples/`): approved iff body matches the HUD regex
     `^[ \t]*status[ \t]*:[ \t]*(?:\r?\n[ \t]*)*(?:[-*][ \t]*)?([a-z]+)` === `approved`.
     Emit `capN/draftN/apprN` + `drafts[]` (newest by mtime, top 6).
-  - **30-day "Repository file growth"** `series[30]` by `pathAddedDate` (Git first saw the
-    path). **This is file growth, NOT knowledge accumulation** — promotion raw→wiki adds a
-    new path on the promotion date even though the knowledge is older, and Git rename
-    detection is unreliable, so `pathAddedDate` ≠ knowledge creation (ADR-0003). Do not
-    label this chart "knowledge growth". TODO: true knowledge-intake growth needs lineage
-    metadata (frontmatter `created` / `source_id` / `promoted_from`, or an ingest log).
+  - **30-day "Knowledge intake"** `series[30]` — cumulative count of distinct intake sources
+    by `knowledge_intake_date`, deduplicated by `source_id`, with `promoted_from` resolving a
+    published page back to its raw origin(s). Files with absent/invalid lineage are excluded
+    and reported through `lineage` coverage; there is no Git or mtime fallback. Also emit
+    `knowledgeN` and `last30`.
+    *Superseded design (2026-06-29):* the series was to be `pathAddedDate` (Git first saw the
+    path), explicitly labeled "Repository file growth" and **not** knowledge accumulation,
+    with the TODO that real intake growth needs lineage metadata. The **ADR-0003 amendment of
+    2026-07-27** delivered that metadata and retired the `pathAddedDate` series.
     **7-day** `week[7]` by mtime,
     `weekTotal`, `activeDays`; **recent** top 6 by mtime; **health**: first
     `^##\s*\[(\d{4}-\d{2}-\d{2})\]\s+lint\s*\|` in `wiki/log.md`, `STALE_DAYS=7`,
     `lastLint/lintAge/healthStale/ageLabel`; helpers `target(v)=max(5,ceil((v+1)/5)*5)`,
     `trend`.
-  - **Timestamps**: mtime from `fs.stat().mtimeMs`; creation from `gitdates.js` (one
-    `git log --diff-filter=A --name-only --format=%aI` pass → path→earliest-add map; fall
-    back to `birthtimeMs`/`mtimeMs` — WSL `birthtime` is unreliable).
+  - **Timestamps**: mtime from `fs.stat().mtimeMs` (activity signals only).
+    *Superseded (ADR-0003 amendment):* creation was to come from `gitdates.js` (one
+    `git log --diff-filter=A --name-only --format=%aI` pass → path→earliest-add map, falling
+    back to `birthtimeMs`/`mtimeMs` since WSL `birthtime` is unreliable). Knowledge dates are
+    now declared in frontmatter, never derived from Git or filesystem timestamps.
 - `GET /api/docs/tree` — directory tree for `AGENTS.md`, `wiki/`, `raw/`, `templates/`,
   `dashboards/`, `.claude/skills/` (folders + `.md` files), each node **tagged with a
   `source` kind** (`wiki` / `raw` / `template` / `dashboard` / `skill` / `root`) so the UI
@@ -221,8 +237,11 @@ indexed.
 Phase 1 uses **live filesystem reads** — and that is the whole promise: live reads mean live
 reads. **No cache, no TTL, no `?fresh=1`, no special Refresh semantics.** Refresh is simply
 "fetch again". This is justified by measurement, not assumption: at the current repo size
-(~105 tracked files) the per-request `git log --diff-filter=A` pass in `gitdates.js` is
-**~30ms cold / ~0ms warm**, and the `fs.stat` scans are negligible. A TTL cache would trade
+(~105 tracked files) the per-request pass measured **~30ms cold / ~0ms warm**. That figure
+came from the since-retired `git log --diff-filter=A` pass in `gitdates.js`; the lineage
+scan that replaced it does no subprocess work but does read each wiki/raw file's text, so
+the number is a historical datum and would need re-measuring, not a current guarantee. The
+`fs.stat` scans are negligible. A TTL cache would trade
 that unmeasurable saving for real liability — stale UI after an ingest, a `?fresh=1` bypass
 path, cache keys — so it is **cut from P1**. The multi-tab / StrictMode-double-fetch /
 multi-panel cases are runtime noise, not product requirements; one fetch per aggregate view,
@@ -231,8 +250,9 @@ no caveat. No persistent cache, no file watcher, no background indexer.
 **Tripwire (not a P1 feature):** if aggregate-endpoint latency ever becomes measurable —
 e.g. p95 of `/api/metrics` or `/api/workflows` exceeds ~250ms on a representative repo — add
 caching *then*, behind an explicit **change-key invalidation** design (key results off a
-cheap repo fingerprint: max mtime + file count across scanned roots, plus `HEAD` for
-git-derived dates), **never** a blind TTL. Only after a real number justifies it.
+cheap repo fingerprint such as max mtime + file count across scanned roots), **never** a
+blind TTL. The former recommendation to add `HEAD` for Git-derived dates was retired with
+`gitdates.js`; lineage dates now come from frontmatter. Only after a real number justifies it.
 
 ### Static hosting / platform hook (deferred out of P1)
 P1 serves only `dashboard/dist` at `/` in prod, single port (`PORT`, default `3001`), bound
@@ -274,8 +294,10 @@ ADR-0004 — so it is not a P1 sidebar entry.) The `HEALTH · DUE` and
   `StatCards` (3 gauge cards, 26-segment gauge + `target()`: **Published memory** (`wikiN`,
   headline) · **Raw capture archive** (`rawN`, append-only — labeled as archive, not backlog)
   · a third file/health gauge — **no raw→wiki funnel framing**; raw and wiki are independent
-  monotonic stores, ADR-0003), `GrowthChart` ("Repository file growth"; port the HUD SVG,
-  recolored coral), `HealthPanel`, `ReviewQueue`, `RecentActivity`, `WeekBars`,
+  monotonic stores, ADR-0003), `GrowthChart` (port the HUD SVG, recolored coral; titled
+  "Knowledge intake · 30d" with lineage-coverage context — the original
+  "Repository file growth" title went out with the `pathAddedDate` series),
+  `HealthPanel`, `ReviewQueue`, `RecentActivity`, `WeekBars`,
   `Integrations`.
 - **Documentation** — `DocsExplorer` file tree (AGENTS.md, wiki/, raw/, templates/,
   dashboards/, .claude/skills/), **grouped/badged by source kind** — Wiki, Raw, Templates,

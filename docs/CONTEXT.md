@@ -49,8 +49,9 @@ Three distinct dates — never collapse them into one ambiguous "creation".
 
 **knowledgeIntakeDate**:
 When knowledge first entered Agentic OS — usually the raw capture date. The semantic
-"memory was created" date. Requires lineage metadata to compute reliably; not derivable
-from Git path history.
+"memory was created" date. Declared as frontmatter `knowledge_intake_date` on an
+intake origin and deduplicated by its stable `source_id`; never derived from Git path
+history.
 _Avoid_: "creation date" (ambiguous), created
 
 **wikiPublishDate**:
@@ -60,9 +61,18 @@ _Avoid_: creation date
 
 **pathAddedDate**:
 When Git first saw the current file path (`git log --diff-filter=A`). A purely mechanical
-fact about the filesystem path, **not** memory creation. Only valid for a chart labeled
-"file growth".
+fact about the filesystem path, **not** memory creation and no longer a canonical
+metrics input.
 _Avoid_: creation date, knowledge creation
+
+**Intake lineage**:
+The explicit frontmatter relationship used by knowledge metrics. An origin declares
+`source_id` + `knowledge_intake_date`; a derived publication declares `promoted_from`
+with one or more raw Markdown paths and inherits their origins. Distinct source IDs count
+once. Missing/invalid lineage is excluded and reported as a coverage gap, never guessed
+from path or filesystem dates. `lineage.problems` is the capped, deterministic
+`{path, reason}` diagnostic surface; it contains no raw body content.
+_Avoid_: basename matching, Git-date fallback, counting publication as intake
 
 ### Security boundaries
 
@@ -90,8 +100,9 @@ _Avoid_: EXPOSE_RAW (ambiguous — sounds like it gates raw metrics too)
 ## Principles
 
 **Path creation is not memory creation. Promotion is publishing, not new intake.**
-The growth chart measures whatever date it actually has — `pathAddedDate` today, so it is
-a "file growth" chart, not a "knowledge accumulation" chart, until lineage metadata exists.
+The growth chart measures distinct intake lineage by `knowledgeIntakeDate`; a
+`promoted_from` page resolves to its raw origin and does not add another event.
+Repository file totals remain separate operational inventory.
 
 **Path safety prevents reading *outside* the allowed roots. It does not make the allowed
 roots safe to *expose*.** Loopback bind and auth-gating are mandatory safety boundaries,
