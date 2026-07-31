@@ -102,13 +102,19 @@ the UI can show a checklist and command preview, but the human runs the LLM skil
 | `npm run dev` | Run the Express server in watch mode and the Vite dashboard dev server. |
 | `npm run build` | Build the dashboard into `platform/dashboard/dist/`. |
 | `npm start` | Serve the API and built dashboard from `http://127.0.0.1:3001`. |
-| `npm test` | Run in-process server API tests. |
+| `npm test` | Run the in-process server API suite, then the React dashboard suite. |
 | `npm run verify` | Boot smoke test with real bind and startup guard checks. |
 | `npm run check:paths` | Verify path traversal, absolute path, and out-of-root rejections. |
 | `npm run check:docs` | Check docs tree, file reads, search, backlinks, and raw content gating against the live repo. |
 | `npm run check:workflows` | Check workflow registry inclusion and status rollups against an independent recount. |
 | `npm run check:skills` | Check the skill registry against an independent directory recount. |
 | `npm run check:metrics-groundtruth` | Compare `/api/metrics` to an independent filesystem recount. |
+
+The dashboard harness is Vitest + jsdom + Testing Library; its dependencies are owned by
+the `dashboard` workspace and its tests exercise DOM behavior rather than snapshots. A
+real-browser visual pass remains separate because jsdom does not validate CSS layout,
+SVG clipping/halo rendering, or browser EventSource/SSE behavior. See
+[ADR-0008](docs/adr/0008-react-dashboard-test-harness.md).
 
 ## API Overview
 

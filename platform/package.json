@@ -11,7 +11,7 @@
     "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
     "build": "npm run build --workspace dashboard",
     "start": "node --env-file-if-exists=.env server/src/index.js",
-    "test": "npm test --workspace server",
+    "test": "npm test --workspace server && npm test --workspace dashboard",
     "verify": "node --env-file-if-exists=.env scripts/verify.mjs",
     "check:paths": "node scripts/check-paths.mjs",
     "check:docs": "node --env-file-if-exists=.env scripts/check-docs.mjs",

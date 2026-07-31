@@ -16,13 +16,29 @@ yet) — see ADR-0005.
 | `npm run dev`    | Server on `:3001` (watch) + Vite dev server (`/api` proxy) |
 | `npm run build`  | Build the dashboard to `dashboard/dist/`                   |
 | `npm start`      | Serve API + built dashboard on `http://127.0.0.1:3001`     |
-| `npm test`       | In-process API tests (Seam 1: exported `app`, no bind)     |
+| `npm test`       | Server API tests, then React dashboard tests                |
 | `npm run verify` | Boot smoke (Seam 2: real startup, bind + guard checks)     |
 | `npm run check:paths` | `paths.safeResolve` rejects traversal/absolute/out-of-root (table test) |
 | `npm run check:docs`  | Docs tree/read/search/backlinks + raw gating against the live repo |
 | `npm run check:workflows` | Registry inclusion + status roll-up vs an independent recount (ADR-0006/0007) |
 | `npm run check:skills` | Skill registry vs an independent directory recount — no phantom skill |
 | `npm run check:metrics-groundtruth` | `/api/metrics` vs an independent recount of the active filesystem roots (permanent check, ADR-0002) |
+
+## Test strategy
+
+`npm test` preserves the server's in-process HTTP seam and then runs the dashboard
+workspace with Vitest + jsdom + Testing Library. Dashboard test dependencies are declared
+in `dashboard/package.json`; `dashboard/test/setup.js` installs jest-dom, explicit cleanup,
+and the one missing browser primitive needed by navigation tests (`scrollIntoView`).
+Network reads are mocked only at the browser `fetch` seam.
+
+The dashboard suite verifies user-visible DOM behavior without snapshots: knowledge
+lineage wording and SVG series endpoint/overflow, deterministic documentation heading IDs
+and navigation, cross-document fragment timing, and Docs Explorer selection. It does not
+replace a real-browser visual pass. jsdom has no layout or paint engine, so CSS geometry,
+responsive behavior, SVG clipping/halo appearance, and the browser's real EventSource/SSE
+stream still require browser-level validation. The baseline EXEC-13 run on 2026-07-30 was
+120/120 server tests plus 7/7 dashboard tests. See ADR-0008.
 
 ## Configuration (env)
 

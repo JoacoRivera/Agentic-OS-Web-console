@@ -15,6 +15,7 @@ const AXIS_IDX = [0, 7, 14, 21, 29];
 export default function GrowthChart({ metrics }) {
   const { series, knowledgeN, lineage, last30 } = metrics;
   const incompleteN = lineage.unlineagedN + lineage.invalidN;
+  const knowledgeLabel = incompleteN > 0 ? 'known distinct sources' : 'distinct sources';
   const lineageState = incompleteN > 0
     ? `Lineage incomplete · ${incompleteN} file${incompleteN === 1 ? '' : 's'} excluded`
     : 'Lineage complete · all eligible files included';
@@ -26,17 +27,27 @@ export default function GrowthChart({ metrics }) {
   const area = `M0,${BASE} L${pts.join(' L')} L${W},${BASE} Z`;
   const lx = X(days - 1);
   const ly = Y(series[days - 1].v);
+  const firstV = series[0].v;
+  const latestV = series[days - 1].v;
+  const trend = latestV > firstV ? 'rising' : latestV < firstV ? 'falling' : 'unchanged';
 
   return (
     <div className="panel">
       <div className="label">
         Knowledge intake · 30d
         <span className="label-sub">
-          {knowledgeN} distinct sources · {last30} entered last 30d ·{' '}
+          {knowledgeN} {knowledgeLabel} · {last30} entered last 30d ·{' '}
           {lineage.lineagedN}/{lineage.eligibleN} files lineaged · {lineageState}
         </span>
       </div>
-      <svg className="growth" viewBox={`0 0 ${W} ${BASE + 6}`} preserveAspectRatio="none" overflow="visible">
+      <svg
+        className="growth"
+        viewBox={`0 0 ${W} ${BASE + 6}`}
+        preserveAspectRatio="none"
+        overflow="visible"
+        role="img"
+        aria-label={`Knowledge intake series, 30 days, ${trend} from ${firstV} to ${latestV} ${knowledgeLabel}`}
+      >
         <defs>
           <linearGradient id="growthFill" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.30" />

@@ -20,7 +20,12 @@ function TreeNode({ node, depth, selected, onSelect }) {
   if (node.type === 'dir') {
     return (
       <>
-        <button className="tree-row tree-dir" style={indent} onClick={() => setOpen(!open)}>
+        <button
+          className="tree-row tree-dir"
+          style={indent}
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
           {open ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
           <Folder size={11} />
           <span className="tree-name">{node.name}</span>
@@ -44,6 +49,7 @@ function TreeNode({ node, depth, selected, onSelect }) {
       style={indent}
       onClick={() => onSelect(node.path)}
       title={node.path}
+      aria-current={selected === node.path ? 'page' : undefined}
     >
       <FileText size={11} />
       <span className="tree-name">{node.name}</span>
