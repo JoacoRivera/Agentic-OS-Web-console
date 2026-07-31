@@ -1,5 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -30,10 +31,20 @@ async function write(base, rel, content = `# ${rel}\n`) {
   await fs.writeFile(abs, content);
 }
 
+// Fixture labels (`page-a`, `src-one`, …) stay human-readable while the
+// frontmatter carries a real canonical-UUID `source_id`, deterministic per
+// label so a label reused across fixtures (dedup, conflicting-date cases)
+// still maps to the same source identity.
+function uuidFor(label) {
+  const hex = crypto.createHash('sha256').update(String(label)).digest('hex');
+  return [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20, 32)]
+    .join('-');
+}
+
 function origin(sourceId, date, body = '') {
   return [
     '---',
-    `source_id: ${sourceId}`,
+    `source_id: ${uuidFor(sourceId)}`,
     `knowledge_intake_date: ${isoDay(date)}`,
     '---',
     body,
@@ -109,7 +120,7 @@ before(async () => {
     'raw/projects/client/examples/cap-front.md',
     [
       '---',
-      'source_id: cap-front',
+      `source_id: ${uuidFor('cap-front')}`,
       `knowledge_intake_date: ${isoDay(daysAgo(10))}`,
       'status: approved',
       '---',
@@ -181,6 +192,17 @@ before(async () => {
   );
   await write(
     bare,
+    'raw/bad-source-id.md',
+    [
+      '---',
+      'source_id: not-a-canonical-uuid',
+      `knowledge_intake_date: ${isoDay(now)}`,
+      '---',
+      '# Non-UUID source_id\n',
+    ].join('\n')
+  );
+  await write(
+    bare,
     'wiki/ambiguous.md',
     [
       '---',
@@ -205,7 +227,7 @@ before(async () => {
   const lastYear = now.getFullYear() - 1;
   const past = isoDay(daysAgo(50));
   const dated = (id, literal) =>
-    ['---', `source_id: ${id}`, `knowledge_intake_date: ${literal}`, '---', `# ${id}`, ''].join('\n');
+    ['---', `source_id: ${uuidFor(id)}`, `knowledge_intake_date: ${literal}`, '---', `# ${id}`, ''].join('\n');
   await write(strict, 'wiki/plain.md', dated('plain', past));
   await write(strict, 'wiki/quoted.md', dated('quoted', `'${past}'`));
   await write(strict, 'raw/zoned.md', dated('zoned', `${past}T10:00:00Z`));
@@ -221,7 +243,14 @@ before(async () => {
   await write(graph, 'raw/src-one.md', origin('src-one', daysAgo(6), '# One\n'));
   await write(graph, 'raw/src-two.md', origin('src-two', daysAgo(4), '# Two\n'));
   // same source ID *and* same date, declared twice → one intake event
-  await write(graph, 'raw/dup-one.md', origin('src-one', daysAgo(6), '# One again\n'));
+  await write(
+    graph,
+    'raw/dup-one.md',
+    origin('src-one', daysAgo(6), '# One again\n').replace(
+      uuidFor('src-one'),
+      uuidFor('src-one').toUpperCase()
+    )
+  );
   // fan-in: one published page derived from two distinct origins
   await write(
     graph,
@@ -237,7 +266,14 @@ before(async () => {
   await write(graph, 'raw/loop-b.md', promotedFrom('raw/loop-a.md', '# Loop B\n'));
   // one source ID with two different dates, inherited by a fan-in promotion
   await write(graph, 'raw/split-a.md', origin('split', daysAgo(6), '# Split A\n'));
-  await write(graph, 'raw/split-b.md', origin('split', daysAgo(3), '# Split B\n'));
+  await write(
+    graph,
+    'raw/split-b.md',
+    origin('split', daysAgo(3), '# Split B\n').replace(
+      uuidFor('split'),
+      uuidFor('split').toUpperCase()
+    )
+  );
   await write(
     graph,
     'wiki/inherits-conflict.md',
@@ -399,10 +435,10 @@ test('lineage metrics do not depend on Git and expose incomplete or conflicting 
   assert.equal(m.knowledgeN, 1);
   assert.equal(m.series[29].v, 1);
   assert.deepEqual(m.lineage, {
-    eligibleN: 10,
+    eligibleN: 11,
     lineagedN: 1,
     unlineagedN: 1,
-    invalidN: 8,
+    invalidN: 9,
     promotedN: 0,
     conflictingSourceIdsN: 1,
     futureDatedSourceIdsN: 1,
@@ -411,6 +447,7 @@ test('lineage metrics do not depend on Git and expose incomplete or conflicting 
       { path: 'raw/conflict-b.md', reason: 'conflicting-source-id' },
       { path: 'raw/future.md', reason: 'future-intake-date' },
       { path: 'raw/broken-frontmatter.md', reason: 'invalid-frontmatter' },
+      { path: 'raw/bad-source-id.md', reason: 'invalid-source-id' },
       { path: 'wiki/unlineaged.md', reason: 'missing-lineage' },
       { path: 'wiki/orphan-promotion.md', reason: 'missing-promoted-from' },
       { path: 'wiki/ambiguous.md', reason: 'origin-and-promotion' },
@@ -425,6 +462,62 @@ test('lineage metrics do not depend on Git and expose incomplete or conflicting 
   assert.equal(m.health.lastLint, null); // no wiki/log.md
   assert.equal(m.health.healthStale, true);
   assert.equal(m.health.ageLabel, 'NEVER');
+});
+
+test('source_id must be a canonical UUID (any textual case, no other shape)', async () => {
+  const uuidRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'aos-metrics-uuid-'));
+  try {
+    const day = isoDay(now);
+    await write(
+      uuidRoot,
+      'wiki/valid-lower.md',
+      `---\nsource_id: 550e8400-e29b-41d4-a716-446655440000\nknowledge_intake_date: ${day}\n---\n# Lower\n`
+    );
+    await write(
+      uuidRoot,
+      'wiki/valid-upper.md',
+      `---\nsource_id: 6BA7B810-9DAD-11D1-80B4-00C04FD430C8\nknowledge_intake_date: ${day}\n---\n# Upper\n`
+    );
+    await write(
+      uuidRoot,
+      'raw/invalid-too-short.md',
+      `---\nsource_id: 550e8400-e29b-41d4-a716\nknowledge_intake_date: ${day}\n---\n# Too short\n`
+    );
+    await write(
+      uuidRoot,
+      'raw/invalid-no-hyphens.md',
+      `---\nsource_id: 550e8400e29b41d4a716446655440000\nknowledge_intake_date: ${day}\n---\n# No hyphens\n`
+    );
+    await write(
+      uuidRoot,
+      'raw/invalid-legacy-label.md',
+      `---\nsource_id: capture-2026-07-27-console-lineage\nknowledge_intake_date: ${day}\n---\n# Legacy label\n`
+    );
+    await write(
+      uuidRoot,
+      'raw/invalid-padded.md',
+      `---\nsource_id: " 550e8400-e29b-41d4-a716-446655440000 "\nknowledge_intake_date: ${day}\n---\n# Padded\n`
+    );
+    const m = await computeMetrics(createConfig({ REPO_ROOT: uuidRoot }), now);
+    assert.equal(m.knowledgeN, 2); // the two valid UUIDs only
+    assert.deepEqual(m.lineage, {
+      eligibleN: 6,
+      lineagedN: 2,
+      unlineagedN: 0,
+      invalidN: 4,
+      promotedN: 0,
+      conflictingSourceIdsN: 0,
+      futureDatedSourceIdsN: 0,
+      problems: [
+        { path: 'raw/invalid-legacy-label.md', reason: 'invalid-source-id' },
+        { path: 'raw/invalid-no-hyphens.md', reason: 'invalid-source-id' },
+        { path: 'raw/invalid-padded.md', reason: 'invalid-source-id' },
+        { path: 'raw/invalid-too-short.md', reason: 'invalid-source-id' },
+      ],
+    });
+  } finally {
+    await fs.rm(uuidRoot, { recursive: true, force: true });
+  }
 });
 
 test('knowledge_intake_date accepts only a lexical YYYY-MM-DD scalar', async () => {
@@ -463,7 +556,7 @@ test('a recursive promotion chain resolves through to the raw origin', () => {
   assert.equal(graphMetrics.knowledgeN, 2);
 });
 
-test('the same source_id declared twice at the same date counts once', async () => {
+test('the same source_id with different textual case at the same date counts once', async () => {
   const withoutDup = path.join(graph, 'raw/dup-one.md');
   const saved = await fs.readFile(withoutDup);
   await fs.rm(withoutDup);
@@ -496,7 +589,7 @@ test('promotion cycles are invalid lineage, not infinite recursion', () => {
   );
 });
 
-test('a source_id with conflicting dates poisons its origins and anything inheriting them', () => {
+test('a source_id with different textual case and conflicting dates poisons its origins and inheritors', () => {
   assert.equal(graphMetrics.lineage.conflictingSourceIdsN, 1); // "split"
   assert.equal(graphMetrics.lineage.futureDatedSourceIdsN, 0);
   // The conflict never reaches the chart: no intake event is invented for it.

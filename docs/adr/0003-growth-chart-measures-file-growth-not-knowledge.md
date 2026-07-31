@@ -17,13 +17,16 @@ An intake origin under `raw/` or `wiki/` declares both fields:
 
 ```yaml
 ---
-source_id: capture-2026-07-27-console-lineage
+source_id: 550e8400-e29b-41d4-a716-446655440000
 knowledge_intake_date: 2026-07-27
 ---
 ```
 
-- `source_id` is a stable, repository-wide identifier for one intake event. Moving,
-  renaming, or publishing a file does not mint a new ID.
+- `source_id` is a generated UUID in canonical 8-4-4-4-12 textual form and is the
+  stable, repository-wide identifier for one intake event. Moving, renaming, or
+  publishing a file does not mint a new ID. UUID comparison is case-insensitive;
+  the metrics implementation normalizes accepted IDs to lowercase before identity,
+  deduplication, and conflict checks.
 - `knowledge_intake_date` is written with the exact bare source representation
   `YYYY-MM-DD` for when that source first entered Agentic OS. Quoted values,
   timestamps, inline comments, invalid calendar dates, and future dates are invalid;

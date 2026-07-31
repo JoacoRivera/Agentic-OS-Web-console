@@ -18,6 +18,11 @@ const GROWTH_DAYS = 30;
 const WEEK_DAYS = 7;
 const LINEAGE_PROBLEM_LIMIT = 20;
 
+// Agentic OS schema (AGENTS.md): `source_id` is a UUID generated once when
+// knowledge first enters the wiki. Canonical 8-4-4-4-12 hex textual form,
+// case-insensitive; no version/variant nibble is enforced.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 const LINEAGE_REASON = Object.freeze({
   CONFLICTING_SOURCE_ID: 'conflicting-source-id',
   FUTURE_INTAKE_DATE: 'future-intake-date',
@@ -182,13 +187,13 @@ function parseLineage(text) {
   if (hasSourceId !== hasIntakeDate) {
     return { kind: 'invalid', reason: LINEAGE_REASON.PARTIAL_ORIGIN };
   }
-  const sourceId = typeof data.source_id === 'string' ? data.source_id.trim() : '';
-  if (!sourceId) {
+  const sourceId = typeof data.source_id === 'string' ? data.source_id : '';
+  if (!sourceId || !UUID_RE.test(sourceId)) {
     return { kind: 'invalid', reason: LINEAGE_REASON.INVALID_SOURCE_ID };
   }
   const date = intakeDay(data.knowledge_intake_date, intakeDateSource(text));
   return date
-    ? { kind: 'origin', sourceId, date }
+    ? { kind: 'origin', sourceId: sourceId.toLowerCase(), date }
     : { kind: 'invalid', reason: LINEAGE_REASON.INVALID_INTAKE_DATE };
 }
 

@@ -93,6 +93,9 @@ async function captureApproved(relPath) {
 // algorithms agreeing is evidence; one algorithm typed twice is not.
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+// Agentic OS schema (AGENTS.md): `source_id` is a UUID minted once at intake.
+// Canonical 8-4-4-4-12 hex form, case-insensitive; no version is assumed.
+const CANONICAL_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PROBLEM_LIMIT = 20;
 const REASON = Object.freeze({
   CONFLICTING_SOURCE_ID: 'conflicting-source-id',
@@ -178,14 +181,14 @@ function lineageRecord(text) {
   }
   if (!hasId && !hasDay) return { type: 'missing', reason: REASON.MISSING_LINEAGE };
   if (hasId !== hasDay) return { type: 'bad', reason: REASON.PARTIAL_ORIGIN };
-  const id = typeof data.source_id === 'string' ? data.source_id.trim() : '';
-  if (!id) return { type: 'bad', reason: REASON.INVALID_SOURCE_ID };
+  const id = typeof data.source_id === 'string' ? data.source_id : '';
+  if (!id || !CANONICAL_UUID.test(id)) return { type: 'bad', reason: REASON.INVALID_SOURCE_ID };
   const day = intakeDay(
     data.knowledge_intake_date,
     scalarSources(text).get('knowledge_intake_date') ?? null
   );
   return day
-    ? { type: 'source', id, day }
+    ? { type: 'source', id: id.toLowerCase(), day }
     : { type: 'bad', reason: REASON.INVALID_INTAKE_DATE };
 }
 

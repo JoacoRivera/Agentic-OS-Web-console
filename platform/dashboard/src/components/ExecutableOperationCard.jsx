@@ -1,6 +1,24 @@
 import { useEffect, useRef, useState } from 'react';
 import CommandPreview from './CommandPreview.jsx';
 
+function abortableDelay(ms, signal) {
+  return new Promise((resolve) => {
+    if (signal.aborted) {
+      resolve(false);
+      return;
+    }
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve(false);
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve(true);
+    }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
 /**
  * An executable operation (Phase 3, ADR-0001): one allowlisted deterministic
  * check behind the full safety flow — dry-run first (shows the fixed command
@@ -16,22 +34,55 @@ export default function ExecutableOperationCard({ op, lastRun }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const sourceRef = useRef(null);
+  const sourceHandlersRef = useRef(null);
   const streamRef = useRef(null);
+  const pollControllerRef = useRef(null);
+  const requestControllersRef = useRef(new Set());
+  const mountedRef = useRef(true);
 
-  useEffect(() => () => sourceRef.current?.close(), []);
+  const closeSource = (expectedSource = null) => {
+    const handlers = sourceHandlersRef.current;
+    if (!handlers || (expectedSource && handlers.source !== expectedSource)) return false;
+    handlers.source.removeEventListener('output', handlers.onOutput);
+    handlers.source.removeEventListener('done', handlers.onDone);
+    handlers.source.onerror = null;
+    handlers.source.close();
+    sourceHandlersRef.current = null;
+    sourceRef.current = null;
+    return true;
+  };
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      closeSource();
+      pollControllerRef.current?.abort();
+      pollControllerRef.current = null;
+      for (const controller of requestControllersRef.current) controller.abort();
+      requestControllersRef.current.clear();
+    };
+  }, []);
   useEffect(() => {
     streamRef.current?.scrollTo(0, streamRef.current.scrollHeight);
   }, [live]);
 
   const post = async (suffix, body) => {
-    const res = await fetch(`/api/operations/${encodeURIComponent(op.id)}/${suffix}`, {
-      method: 'POST',
-      headers: body ? { 'Content-Type': 'application/json' } : {},
-      body: body ? JSON.stringify(body) : undefined,
-    });
-    const json = await res.json().catch(() => ({}));
-    if (!res.ok && res.status !== 202) throw new Error(json.message || `HTTP ${res.status}`);
-    return json;
+    const controller = new AbortController();
+    requestControllersRef.current.add(controller);
+    try {
+      const res = await fetch(`/api/operations/${encodeURIComponent(op.id)}/${suffix}`, {
+        method: 'POST',
+        headers: body ? { 'Content-Type': 'application/json' } : {},
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok && res.status !== 202) throw new Error(json.message || `HTTP ${res.status}`);
+      return json;
+    } finally {
+      requestControllersRef.current.delete(controller);
+    }
   };
 
   const doDryRun = async () => {
@@ -39,31 +90,34 @@ export default function ExecutableOperationCard({ op, lastRun }) {
     setError(null);
     setResult(null);
     try {
-      setDry(await post('dry-run'));
+      const response = await post('dry-run');
+      if (mountedRef.current) setDry(response);
     } catch (err) {
-      setError(err.message);
+      if (mountedRef.current) setError(err.message);
     } finally {
-      setBusy(false);
+      if (mountedRef.current) setBusy(false);
     }
   };
 
   const finish = (snapshot) => {
-    sourceRef.current?.close();
-    sourceRef.current = null;
+    if (!mountedRef.current) return;
     setLive(null);
     setResult(snapshot);
     setBusy(false);
   };
 
   // Fallback when SSE drops: poll the snapshot route until the run ends.
-  const pollUntilDone = async (runId) => {
-    for (;;) {
-      await new Promise((r) => setTimeout(r, 1000));
-      const res = await fetch(`/api/operations/runs/${runId}`);
+  const pollUntilDone = async (runId, signal) => {
+    while (mountedRef.current && !signal.aborted) {
+      if (!(await abortableDelay(1000, signal))) return null;
+      if (!mountedRef.current || signal.aborted) return null;
+      const res = await fetch(`/api/operations/runs/${runId}`, { signal });
       if (!res.ok) throw new Error(`run lost (HTTP ${res.status})`);
       const snap = await res.json();
+      if (!mountedRef.current || signal.aborted) return null;
       if (snap.status !== 'running') return snap;
     }
+    return null;
   };
 
   const doRun = async () => {
@@ -71,25 +125,47 @@ export default function ExecutableOperationCard({ op, lastRun }) {
     setError(null);
     try {
       const started = await post('run', { confirm: true, confirmToken: dry.confirmToken });
+      if (!mountedRef.current) return;
       setDry(null);
       setLive({ runId: started.runId, text: '' });
 
       const source = new EventSource(`/api/operations/runs/${started.runId}/events`);
       sourceRef.current = source;
-      source.addEventListener('output', (e) => {
+      const onOutput = (e) => {
+        if (!mountedRef.current || sourceRef.current !== source) return;
         const { chunk } = JSON.parse(e.data);
         setLive((prev) => (prev ? { ...prev, text: prev.text + chunk } : prev));
-      });
-      source.addEventListener('done', (e) => finish(JSON.parse(e.data)));
-      source.onerror = () => {
-        source.close();
-        pollUntilDone(started.runId).then(finish, (err) => {
-          setError(err.message);
-          setLive(null);
-          setBusy(false);
-        });
       };
+      const onDone = (e) => {
+        if (!mountedRef.current || sourceRef.current !== source) return;
+        const snapshot = JSON.parse(e.data);
+        closeSource(source);
+        finish(snapshot);
+      };
+      const onError = () => {
+        if (!mountedRef.current || sourceRef.current !== source) return;
+        closeSource(source);
+        const controller = new AbortController();
+        pollControllerRef.current = controller;
+        pollUntilDone(started.runId, controller.signal)
+          .then((snapshot) => {
+            if (snapshot && mountedRef.current && !controller.signal.aborted) finish(snapshot);
+          }, (err) => {
+            if (!mountedRef.current || controller.signal.aborted) return;
+            setError(err.message);
+            setLive(null);
+            setBusy(false);
+          })
+          .finally(() => {
+            if (pollControllerRef.current === controller) pollControllerRef.current = null;
+          });
+      };
+      sourceHandlersRef.current = { source, onOutput, onDone, onError };
+      source.addEventListener('output', onOutput);
+      source.addEventListener('done', onDone);
+      source.onerror = onError;
     } catch (err) {
+      if (!mountedRef.current) return;
       setError(err.message);
       setDry(null); // the token is single-use — a failed confirm needs a fresh dry-run
       setBusy(false);
