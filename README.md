@@ -107,7 +107,7 @@ the UI can show a checklist and command preview, but the human runs the LLM skil
 | `npm run check:paths` | Verify path traversal, absolute path, and out-of-root rejections. |
 | `npm run check:docs` | Check docs tree, file reads, search, backlinks, and raw content gating against the live repo. |
 | `npm run check:workflows` | Check workflow registry inclusion and status rollups against an independent recount. |
-| `npm run check:skills` | Check the skill registry against an independent directory recount. |
+| `npm run check:skills` | Check the skill registry and independently require each `frontmatter.name` to match its directory. |
 | `npm run check:metrics-groundtruth` | Compare `/api/metrics` to an independent filesystem recount. |
 
 The dashboard harness is Vitest + jsdom + Testing Library; its dependencies are owned by
@@ -129,7 +129,8 @@ The dashboard uses these localhost API routes:
 - `GET /api/docs/backlinks?path=...`: find links to a doc.
 - `GET /api/workflows`: workflow registry.
 - `GET /api/workflow?path=...`: workflow detail by path.
-- `GET /api/skills`: skill registry.
+- `GET /api/skills`: skill registry; invocation identity is canonical from the directory,
+  with bounded frontmatter-name diagnostics when metadata drifts.
 - `GET /api/operations`: guided and executable operation catalog.
 - `POST /api/operations/:id/dry-run`: prepare an executable operation and issue a
   short-lived confirmation token.

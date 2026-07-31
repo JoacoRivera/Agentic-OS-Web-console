@@ -21,6 +21,38 @@ function firstBodyLine(body) {
   return null;
 }
 
+function skillNameContract(frontmatter, parseFailed, expected) {
+  if (parseFailed) {
+    return {
+      declaredName: null,
+      nameDiagnostic: { code: 'invalid-frontmatter-name', expected },
+    };
+  }
+
+  if (!Object.hasOwn(frontmatter, 'name')) {
+    return {
+      declaredName: null,
+      nameDiagnostic: { code: 'missing-frontmatter-name', expected },
+    };
+  }
+
+  if (typeof frontmatter.name !== 'string' || !frontmatter.name.trim()) {
+    return {
+      declaredName: null,
+      nameDiagnostic: { code: 'invalid-frontmatter-name', expected },
+    };
+  }
+
+  const declaredName = frontmatter.name;
+  return {
+    declaredName,
+    nameDiagnostic:
+      declaredName === expected
+        ? null
+        : { code: 'frontmatter-name-mismatch', expected },
+  };
+}
+
 /**
  * Guess the related workflow: the registry-eligible workflow whose basename
  * is mentioned earliest in the skill text. A guess, not frontmatter truth —
@@ -76,16 +108,24 @@ export async function listSkills(config) {
           // row (the file exists); description just falls back to the body.
           let fm = {};
           let body = text;
+          let frontmatterParseFailed = false;
           try {
             const parsed = matter(text);
             fm = parsed.data ?? {};
             body = parsed.content;
           } catch {
-            /* fall through to body fallback */
+            frontmatterParseFailed = true;
           }
+          const { declaredName, nameDiagnostic } = skillNameContract(
+            fm,
+            frontmatterParseFailed,
+            dir.name
+          );
           return {
             name: dir.name,
             invocation: `/${dir.name}`,
+            declaredName,
+            nameDiagnostic,
             description:
               (typeof fm.description === 'string' && fm.description.trim()) ||
               firstBodyLine(body),

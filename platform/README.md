@@ -21,7 +21,7 @@ yet) — see ADR-0005.
 | `npm run check:paths` | `paths.safeResolve` rejects traversal/absolute/out-of-root (table test) |
 | `npm run check:docs`  | Docs tree/read/search/backlinks + raw gating against the live repo |
 | `npm run check:workflows` | Registry inclusion + status roll-up vs an independent recount (ADR-0006/0007) |
-| `npm run check:skills` | Skill registry vs an independent directory recount — no phantom skill |
+| `npm run check:skills` | Skill registry vs an independent recount, including exact `frontmatter.name` = directory conformance |
 | `npm run check:metrics-groundtruth` | `/api/metrics` vs an independent recount of the active filesystem roots (permanent check, ADR-0002) |
 
 ## Test strategy
@@ -106,6 +106,20 @@ applicable"), and `checks_exempt: [<check-id>]` opts out of a check that legitim
 doesn't apply. Editorial niceties (examples, "when to use", related skill, usage
 reference) are informational-only. Per-workflow lookups use `?path=` — workflow paths
 contain slashes.
+
+## Skill registry (`GET /api/skills`)
+
+Scans `.claude/skills/*/SKILL.md` in stable directory-name order. A skill's `name` and
+`invocation` (`/<name>`) always come from its directory because that is the canonical
+dispatch identity; frontmatter can never rename the invocation. Each row also exposes
+`declaredName` (the exact parsed non-empty string, otherwise `null`) and a bounded `nameDiagnostic`:
+`null` when names agree, or `{code, expected}` with code
+`frontmatter-name-mismatch`, `missing-frontmatter-name`, or
+`invalid-frontmatter-name`. Diagnostics contain no skill body or invalid metadata value.
+
+`npm run check:skills` independently reads the initial frontmatter block rather than
+reusing the registry parser. It checks every discovered skill and exits non-zero when
+`frontmatter.name !== directoryName`, with deterministic directory-name ordering.
 
 ## Legacy HUD retirement (completed 2026-07-30)
 

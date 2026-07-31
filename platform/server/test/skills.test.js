@@ -39,15 +39,15 @@ before(async () => {
   );
   await write(
     '.claude/skills/aos-wiki-lint/SKILL.md',
-    '---\ndescription: Check wiki health.\n---\n\n# Wiki Lint\n'
+    '---\nname: wiki-lint\ndescription: Check wiki health.\n---\n\n# Wiki Lint\n'
   );
   await write(
     '.claude/skills/aos-capture-approved-example/SKILL.md',
-    '---\ndescription: Capture an approved result into raw/.\n---\n\n# Capture\n'
+    '---\nname: []\ndescription: Capture an approved result into raw/.\n---\n\n# Capture\n'
   );
   await write(
     '.claude/skills/aos-promote-draft-memory/SKILL.md',
-    '---\ndescription: Triage a draft capture.\n---\n\n# Promote\n'
+    '---\nname: "aos-promote-draft-memory "\ndescription: Triage a draft capture.\n---\n\n# Promote\n'
   );
 
   // Non-skills that must NOT appear: a directory without SKILL.md, a stray
@@ -103,6 +103,44 @@ test('description prefers frontmatter, falls back to the first body line', async
     byName['aos-query-memory'].description,
     'Read-only recall of the wiki before doing work.'
   );
+});
+
+test('directory name stays canonical and frontmatter name drift is diagnosed', async () => {
+  const res = await get('/api/skills');
+  const byName = Object.fromEntries(res.body.skills.map((s) => [s.name, s]));
+
+  assert.equal(byName['aos-ingest'].declaredName, 'aos-ingest');
+  assert.equal(byName['aos-ingest'].nameDiagnostic, null);
+
+  const drift = byName['aos-wiki-lint'];
+  assert.equal(drift.name, 'aos-wiki-lint');
+  assert.equal(drift.invocation, '/aos-wiki-lint');
+  assert.equal(drift.declaredName, 'wiki-lint');
+  assert.deepEqual(drift.nameDiagnostic, {
+    code: 'frontmatter-name-mismatch',
+    expected: 'aos-wiki-lint',
+  });
+
+  const whitespaceDrift = byName['aos-promote-draft-memory'];
+  assert.equal(whitespaceDrift.declaredName, 'aos-promote-draft-memory ');
+  assert.equal(whitespaceDrift.nameDiagnostic?.code, 'frontmatter-name-mismatch');
+});
+
+test('required frontmatter name reports missing and invalid values without exposing them', async () => {
+  const res = await get('/api/skills');
+  const byName = Object.fromEntries(res.body.skills.map((s) => [s.name, s]));
+
+  assert.equal(byName['aos-query-memory'].declaredName, null);
+  assert.deepEqual(byName['aos-query-memory'].nameDiagnostic, {
+    code: 'missing-frontmatter-name',
+    expected: 'aos-query-memory',
+  });
+
+  assert.equal(byName['aos-capture-approved-example'].declaredName, null);
+  assert.deepEqual(byName['aos-capture-approved-example'].nameDiagnostic, {
+    code: 'invalid-frontmatter-name',
+    expected: 'aos-capture-approved-example',
+  });
 });
 
 test('related workflow is a guess from mentions — null when nothing matches', async () => {

@@ -122,6 +122,11 @@ Claude, requires LLM judgment. **Not executable by the console** — the console
 **`aos-*`-prefixed** (13 as of 2026-07-04, e.g. `/aos-ingest`, `/aos-query-memory`,
 `/aos-wiki-lint`); the registry scans the directory, never a hardcoded list — the old
 unprefixed invocations (`/ingest`, `/query-memory`, …) are retired.
+The directory name is the canonical registry `name` and invocation identity. The required
+`frontmatter.name` is declared metadata only: the registry exposes it separately as
+`declaredName` and emits one bounded `nameDiagnostic` when it is missing, invalid, or
+different, without exposing the skill body or an invalid value. `check:skills` verifies
+the exact equality independently and fails on drift in stable directory order.
 _Avoid_: command, operation, tool
 
 **Workflow**:
