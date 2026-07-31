@@ -81,27 +81,14 @@ test('params are guided-only preview fill-ins with matching <name> tokens (P2)',
   }
 });
 
-test('no phantom skill: catalog skills are among the 13 real aos-* ones', async () => {
-  // The repo's skill standard: every skill is aos-*-prefixed. The verify
-  // smoke re-checks these names against the live directory scan.
-  const REAL = [
-    'aos-capture-approved-example',
-    'aos-eval',
-    'aos-hook',
-    'aos-implement',
-    'aos-ingest',
-    'aos-plan',
-    'aos-pre-commit',
-    'aos-promote-draft-memory',
-    'aos-query-memory',
-    'aos-task-mode',
-    'aos-test-wiki-lint',
-    'aos-verify-block',
-    'aos-wiki-lint',
-  ];
+test('catalog skill references use the canonical aos-* shape — no fixed count or phantom', async () => {
+  // ADR-0009: this unit test checks the static catalog's shape. The verify
+  // smoke cross-checks every reference against the live directory scan.
   const body = await getCatalog();
   for (const op of body.operations) {
-    if (op.skill) assert.ok(REAL.includes(op.skill), `${op.skill} is not a real repo skill`);
+    if (!op.skill) continue;
+    assert.match(op.skill, /^aos-[a-z0-9]+(?:-[a-z0-9]+)*$/);
+    assert.notEqual(op.skill, 'bw2-update-memory');
   }
 });
 

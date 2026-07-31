@@ -17,7 +17,7 @@ The design record still governs the code and is where intent is settled:
 - `docs/plans/odysseus-web-console-2026-06-29.md` — the original implementation plan. It is a
   **historical** document: where it disagrees with an ADR (notably the growth chart), the ADR
   wins. `docs/plans/odysseus-web-console-next-2026-07-04.md` carries the live follow-up plan.
-- `docs/adr/0001..0007` — accepted architecture decisions. These are **binding invariants**,
+- `docs/adr/0001..0009` — accepted architecture decisions. These are **binding invariants**,
   not suggestions.
 
 ## What this project is
@@ -36,10 +36,8 @@ memory repo (see `platform/.env.example`).
 
 These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if tests pass.
 
-1. **The console never executes LLM Skills** (ADR-0001). The repo Skills — all
-   `aos-*`-prefixed, currently 13 (e.g. `/aos-ingest`, `/aos-query-memory`, `/aos-wiki-lint`,
-   `/aos-capture-approved-example`, `/aos-promote-draft-memory`, `/aos-hook`,
-   `/aos-pre-commit`, …) — need
+1. **The console never executes LLM Skills** (ADR-0001/ADR-0009). The repo Skills — all
+   `aos-*`-prefixed, 15 observed on 2026-07-30 — need
    LLM judgment and can only ever be **Guided Operations** (checklist + command preview). Do
    not shell out to headless Claude or pretend a Skill is an npm script. The Phase-3
    executable allowlist contains **only** deterministic checks (`npm run verify`,
@@ -97,9 +95,10 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
 Three deliberately distinct, non-interchangeable concepts (`CONTEXT.md`):
 
 - **Skill** — an LLM-facing capability pack from `.claude/skills/*/SKILL.md`. Invoked by
-  Claude; not console-executable. All are **`aos-*`-prefixed** (13 as of 2026-07-04); the
-  registry scans the directory — never hardcode a phantom Skill (`/bw2-update-memory` does
-  not exist, and the old unprefixed names `/ingest`, `/query-memory`, … are retired).
+  Claude; not console-executable. All are **`aos-*`-prefixed** (15 observed on
+  2026-07-30); the registry and checks discover/recount them and never fix the count
+  (ADR-0009). Never hardcode a phantom Skill (`/bw2-update-memory` does not exist, and the
+  old unprefixed names `/ingest`, `/query-memory`, … are retired).
 - **Workflow** — a documented runbook/procedure from `wiki/workflows/*.md`, followed by a
   human or LLM; not console-executable. Has a `workflow_kind`.
 - **Operation** — a console-facing **action card**. Two strict subtypes: **Guided** (checklist

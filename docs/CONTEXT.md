@@ -119,9 +119,10 @@ These three are deliberately distinct concepts and must not be conflated in any 
 An LLM-facing capability/instruction pack from `.claude/skills/*/SKILL.md`. Invoked by
 Claude, requires LLM judgment. **Not executable by the console** — the console may only
 *describe* a skill or guide a human through invoking it. All repo skills are
-**`aos-*`-prefixed** (13 as of 2026-07-04, e.g. `/aos-ingest`, `/aos-query-memory`,
-`/aos-wiki-lint`); the registry scans the directory, never a hardcoded list — the old
-unprefixed invocations (`/ingest`, `/query-memory`, …) are retired.
+**`aos-*`-prefixed** (15 observed on 2026-07-30); the registry, `verify`, and
+`check:skills` discover/recount the directory and never fix the count
+([ADR-0009](adr/0009-canonical-aos-skill-catalog-is-discovered.md)). The old unprefixed
+invocations (`/ingest`, `/query-memory`, …) are retired.
 The directory name is the canonical registry `name` and invocation identity. The required
 `frontmatter.name` is declared metadata only: the registry exposes it separately as
 `declaredName` and emits one bounded `nameDiagnostic` when it is missing, invalid, or
@@ -193,5 +194,9 @@ _Avoid_: conflating with Platform Apps / the memory console
 - A console Operation that maps onto an LLM Skill (ingest, promote-draft, capture-example,
   query-memory) can only ever be a **Guided Operation**. It must never claim to *execute*
   the skill.
+- Guided Operation cards are representative flows, not one-card-per-Skill coverage. A
+  skill-backed preview must resolve through the live Skill Registry and invoke the same
+  `aos-*` identity; only the Hero command bar is exhaustive, because it derives directly
+  from `/api/skills` (ADR-0009).
 - `/wiki-lint` (LLM skill) is split from a future deterministic `check:wiki-structure`
   Executable Operation — same intent, different runtime, different concept.

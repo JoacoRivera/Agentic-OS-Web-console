@@ -120,6 +120,10 @@ dispatch identity; frontmatter can never rename the invocation. Each row also ex
 `npm run check:skills` independently reads the initial frontmatter block rather than
 reusing the registry parser. It checks every discovered skill and exits non-zero when
 `frontmatter.name !== directoryName`, with deterministic directory-name ordering.
+The registry, `verify`, and `check:skills` report whatever count they observe; none fixes
+an expected total. The 15 skills seen on 2026-07-30 are a dated snapshot under
+[ADR-0009](../docs/adr/0009-canonical-aos-skill-catalog-is-discovered.md), not a code
+constant.
 
 ## Legacy HUD retirement (completed 2026-07-30)
 
@@ -141,6 +145,10 @@ values substitute into the preview's `<name>` tokens — producing the exact tex
 the browser; no endpoint accepts them. LLM Skills are guided-only forever (ADR-0001);
 the catalog module enforces the invariants at load time, and additionally throws on a
 param without a matching preview token.
+These cards are representative flows, not exhaustive Skill coverage. The Hero command
+bar is the exhaustive invocation surface and reads `/api/skills` live; `verify`
+cross-checks every static skill-backed preview against that same registry. No
+one-card-per-Skill parity is required (ADR-0009).
 
 ## Controlled execution (Phase 3, `POST /api/operations/:id/{dry-run,run}`)
 

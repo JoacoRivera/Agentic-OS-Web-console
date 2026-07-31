@@ -85,7 +85,8 @@ systemd services alone do not prevent WSL from idle-terminating.
 - Documentation explorer: browse, read, search, and inspect backlinks for memory docs.
 - Workflow registry: scan `wiki/workflows/**/*.md`, flag objective defects, and keep
   `Unclassified` as a first-class status when `workflow_kind` is missing.
-- Skill registry: scan installed Agentic OS skills and provide copyable invocations.
+- Skill registry: scan installed Agentic OS skills and provide copyable invocations. The
+  observed total is recounted from the directory, never configured.
 - Review queue and activity: surface drafts, recent changes, and health signals.
 - Operations: guided checklists for LLM/human workflows plus a small allowlist of
   deterministic checks that can be run locally through the console.
@@ -93,6 +94,11 @@ systemd services alone do not prevent WSL from idle-terminating.
 
 LLM skills are never executed by the console. Skill-backed operations are guided-only:
 the UI can show a checklist and command preview, but the human runs the LLM skill.
+The 15 skills observed on 2026-07-30 are a dated catalog snapshot, not a fixed count.
+The Hero command bar derives its exhaustive invocation list from `/api/skills`; Guided
+Operation cards are representative and every skill-backed preview must resolve to that
+live registry. See
+[ADR-0009](docs/adr/0009-canonical-aos-skill-catalog-is-discovered.md).
 
 ## Commands
 

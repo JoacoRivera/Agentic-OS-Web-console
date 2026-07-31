@@ -21,6 +21,11 @@ Date: 2026-06-29
 > `.obsidian/snippets/agentic-dashboard.css`. Every HUD/dashboard-root passage below records
 > the 2026-06-29 migration design only. The current console does not scan, expose, allow, or
 > classify `dashboards/`; see ADR-0002's 2026-07-30 amendment.
+>
+> **Catalog amendment — 2026-07-30.** Statements below requiring exactly five Skills
+> preserve the original acceptance baseline. The catalog later measured 13 skills on
+> 2026-07-04 and 15 on 2026-07-30. ADR-0009 now governs the living contract:
+> discover/recount the canonical `aos-*` directories, never fix the count.
 
 ## Context
 
@@ -396,8 +401,9 @@ Performed during implementation:
    stay informational and a `checks_exempt` / "verification: not applicable" workflow does
    **not** show yellow. Spot-checked against `german-technical-emails` (style-guide kind:
    stays OK) and a runbook.
-6. **Skill registry** finds exactly the five `.claude/skills/*` skills — and does **not**
-   invent `/bw2-update-memory`.
+6. **Skill registry** finds exactly the five `.claude/skills/*` skills in this historical
+   baseline — and does **not** invent `/bw2-update-memory` (superseded for current counts by
+   ADR-0009).
 7. **Safety**: no arbitrary-shell endpoint exists; `POST /api/operations/*` returns 501
    until P3; path traversal (`..`, absolute) is rejected by `paths.safeResolve`.
    **Loopback bind**: server is bound to `127.0.0.1` only (not `0.0.0.0`); a non-loopback
@@ -411,7 +417,8 @@ Performed during implementation:
 A lightweight **`npm run verify`** script (`platform/scripts/verify.mjs`, added in P1)
 boots the server and asserts: server bound to loopback (`127.0.0.1`) only; non-loopback
 `HOST` without auth fails startup; `/api/metrics` responds; `/api/docs/tree` responds;
-`/api/skills` returns exactly 5; path traversal (`?path=../../etc`) is rejected; a
+`/api/skills` returns exactly 5 in this historical acceptance baseline (current live
+verification recounts instead; ADR-0009); path traversal (`?path=../../etc`) is rejected; a
 non-loopback `Host` header and a cross-origin `Origin` are both rejected; raw metrics work
 while raw content is hidden by default and appears only with `EXPOSE_RAW_CONTENT=true`;
 `POST /api/operations/:id/run` returns 501 before P3; and `npm run build` succeeds. It prints pass/fail per check and exits non-zero on any failure
