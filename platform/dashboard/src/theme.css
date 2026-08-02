@@ -410,7 +410,14 @@ a {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
+}
+
+/* Grid gaps already space these panels; the flow-layout `.panel + .panel`
+   margin would otherwise push every column after the first down by 16px. */
+.stat-grid > .panel + .panel,
+.grid-2 > .panel + .panel {
+  margin-top: 0;
 }
 
 /* long unbreakable content (file paths) must truncate, not widen the column */
@@ -469,20 +476,33 @@ a {
 
 /* ---- growth chart ---- */
 
+/* The plot box is measured to keep the SVG user space 1:1 (see GrowthChart). */
+.growth-plot {
+  position: relative;
+}
+
 svg.growth {
   display: block;
   width: 100%;
   height: 180px;
 }
 
+/* Ticks are absolutely placed at their sample x, so they line up with the
+   vertical grid rules instead of being spread evenly by the flex box. */
 .axis {
-  display: flex;
-  justify-content: space-between;
-  margin-top: 6px;
+  position: relative;
+  height: 14px;
+  margin-top: 4px;
   color: var(--muted);
   font-size: 9px;
   letter-spacing: 0.14em;
   text-transform: uppercase;
+}
+
+.axis span {
+  position: absolute;
+  top: 0;
+  white-space: nowrap;
 }
 
 /* ---- run rows (health / recent activity) ---- */
