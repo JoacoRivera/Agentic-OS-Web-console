@@ -67,7 +67,7 @@ wiki+raw+templates minus `_template`; **double-counts a promoted item** — neve
 knowledge-intake `series` keyed on explicit `source_id` + `knowledge_intake_date`
 origins, with `promoted_from` pages resolving to those origins instead of counting
 again (ADR-0003); a 7-day `week` by mtime (`weekTotal`, `activeDays`); `recent`; `health` from
-the first `lint` entry in `wiki/log.md`; `targets` + `trend`.
+the first `lint` entry in `wiki/log.md`; `trend`.
 
 Lineage fields live in YAML frontmatter. Intake origins declare `source_id` and a bare,
 unquoted `knowledge_intake_date: YYYY-MM-DD`; timestamps, quoted dates, comments, invalid

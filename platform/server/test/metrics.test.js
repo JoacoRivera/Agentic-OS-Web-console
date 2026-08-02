@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import request from 'supertest';
-import { computeMetrics, isApprovedText, target } from '../src/metrics.js';
+import { computeMetrics, isApprovedText } from '../src/metrics.js';
 import { createApp } from '../src/app.js';
 import { createConfig } from '../src/config.js';
 
@@ -420,14 +420,10 @@ test('health comes from the FIRST lint entry in wiki/log.md', () => {
   assert.equal(metrics.health.staleDays, 7);
 });
 
-test('gauge targets use the canonical target helper', () => {
-  assert.equal(target(0), 5);
-  assert.equal(target(4), 5);
-  assert.equal(target(5), 10); // strictly above v
-  assert.equal(target(23), 25);
-  assert.equal(metrics.targets.wikiN, target(metrics.wikiN));
-  assert.equal(metrics.targets.rawN, target(metrics.rawN));
-  assert.equal(metrics.targets.weekTotal, target(metrics.weekTotal));
+test('no synthetic gauge ceiling: target() helper and targets field are removed', async () => {
+  const metricsModule = await import('../src/metrics.js');
+  assert.equal(metricsModule.target, undefined);
+  assert.equal('targets' in metrics, false);
 });
 
 test('lineage metrics do not depend on Git and expose incomplete or conflicting metadata', async () => {
@@ -651,10 +647,11 @@ test('GET /api/metrics returns the documented fields', async () => {
     'wikiN', 'rawN', 'all', 'examples', 'projects', 'workflows', 'rawProj', 'rawFlow',
     'capN', 'draftN', 'apprN', 'drafts', 'knowledgeN', 'lineage',
     'series', 'last30', 'week', 'weekTotal',
-    'activeDays', 'recent', 'health', 'targets', 'trend', 'generatedAt',
+    'activeDays', 'recent', 'health', 'trend', 'generatedAt',
   ]) {
     assert.ok(field in m, `missing field: ${field}`);
   }
+  assert.equal('targets' in m, false);
   assert.equal(m.wikiN, 6);
   assert.equal(m.series.length, 30);
   assert.equal(m.week.length, 7);

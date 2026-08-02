@@ -425,7 +425,7 @@ a {
   }
 }
 
-/* ---- stat cards (26-segment gauges) ---- */
+/* ---- stat cards ---- */
 
 .stat-head {
   display: flex;
@@ -441,25 +441,6 @@ a {
   color: var(--muted);
   font-weight: 400;
   letter-spacing: 0.12em;
-}
-
-.gauge {
-  display: flex;
-  gap: 3px;
-}
-
-.gauge i {
-  flex: 1;
-  height: 18px;
-  border-radius: 2px;
-  background: var(--panel-2);
-  border: 1px solid var(--line);
-}
-
-.gauge i.on {
-  background: var(--accent);
-  border-color: var(--accent);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 60%, transparent);
 }
 
 .stat-foot {

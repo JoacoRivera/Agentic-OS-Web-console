@@ -52,11 +52,6 @@ export function isApprovedText(text) {
   return !!m && m[1].toLowerCase() === 'approved';
 }
 
-/** Gauge target: next multiple of 5 strictly above v, floor 5. */
-export function target(v) {
-  return Math.max(5, Math.ceil((v + 1) / 5) * 5);
-}
-
 const skip = (page) => SKIP_BASENAMES.has(page.name);
 const isEx = (page) => page.folder.includes('examples');
 const inFolder = (page, folder) => page.path === folder || page.path.startsWith(folder + '/');
@@ -476,11 +471,6 @@ export async function computeMetrics(config, now = new Date()) {
       healthStale,
       ageLabel,
       staleDays: config.LINT_STALE_DAYS,
-    },
-    targets: {
-      wikiN: target(wiki.length),
-      rawN: target(raw.length),
-      weekTotal: target(weekTotal),
     },
     trend: weekTotal > 0 ? 'ACTIVE' : 'IDLE',
     generatedAt: now.toISOString(),
