@@ -163,6 +163,11 @@ function lineageRecord(text) {
   try {
     file = matter(text);
   } catch {
+    // gray-matter caches the file object before parsing it, so a throw leaves
+    // a `data: {}` stub keyed by this exact text. Drop it, or a repeat parse
+    // of identical content would read as "no lineage declared" rather than
+    // "unparseable frontmatter" — and the two sides would disagree by luck.
+    delete matter.cache[text];
     return { type: 'bad', reason: REASON.INVALID_FRONTMATTER };
   }
   const { data } = file;
@@ -321,6 +326,15 @@ async function recountLineage(paths) {
     return a.path < b.path ? -1 : a.path > b.path ? 1 : 0;
   });
 
+  // Reason histogram over the FULL problem set, recounted here before any cap
+  // is applied — the point of the field is that it survives the 20-path
+  // truncation, so tallying the truncated list would check nothing. Keys are
+  // emitted in sorted order to match the console's stable serialization.
+  const tally = {};
+  for (const { reason } of problems) tally[reason] = (tally[reason] ?? 0) + 1;
+  const reasonCounts = {};
+  for (const reason of Object.keys(tally).sort()) reasonCounts[reason] = tally[reason];
+
   // --- 30-day cumulative series, walked over local calendar days ---
   const anchor = new Date();
   const dayAt = (offset) =>
@@ -344,6 +358,7 @@ async function recountLineage(paths) {
       promotedN,
       conflictingSourceIdsN: conflicts.size,
       futureDatedSourceIdsN: future.size,
+      reasonCounts,
       problems: problems.slice(0, PROBLEM_LIMIT),
     },
   };
@@ -498,6 +513,21 @@ try {
   const counts = console_.lineage;
   check('lineage counters', pickCounters(counts), pickCounters(truth.lineage));
   check('lineage.problems (exact, max 20)', counts.problems, truth.lineage.problems);
+
+  // The histogram is the uncapped view of the same defects: it must match the
+  // recount key for key, and — unlike `problems` — its values must still
+  // account for every problem file once the 20-path sample has been truncated.
+  check('lineage.reasonCounts (uncapped, exact)', counts.reasonCounts, truth.lineage.reasonCounts);
+  check(
+    'lineage sum(reasonCounts) = unlineagedN+invalidN',
+    Object.values(counts.reasonCounts ?? {}).reduce((n, v) => n + v, 0),
+    counts.unlineagedN + counts.invalidN
+  );
+  check(
+    'lineage.reasonCounts exposes counts only',
+    Object.values(counts.reasonCounts ?? {}).every((v) => Number.isInteger(v) && v > 0),
+    true
+  );
   check(
     'lineage partition lineagedN+unlineagedN+invalidN = eligibleN',
     counts.lineagedN + counts.unlineagedN + counts.invalidN,

@@ -181,7 +181,12 @@ Important metric terms:
 - `lineage`: coverage of that keying — `eligibleN` / `lineagedN` / `unlineagedN` /
   `invalidN` / `promotedN` plus conflicting- and future-dated-source counts.
   `lineage.problems` exposes at most 20 deterministic `{path, reason}` diagnostics,
-  ordered by reason then path, and never includes file content. Stable reason codes are
+  ordered by reason then path, and never includes file content.
+  `lineage.reasonCounts` is the uncapped companion to that sample: a key-sorted map from
+  each reason code actually present to its positive integer count, computed over the
+  **full** problem set before the 20-item cap, so a truncated sample can never make the
+  tail look empty. It is `{}` when lineage is clean, carries counts only — no paths and no
+  body content — and its values always sum to `unlineagedN + invalidN`. Stable reason codes are
   `invalid-frontmatter`, `missing-lineage`, `partial-origin`, `origin-and-promotion`,
   `invalid-source-id`, `invalid-intake-date`, `future-intake-date`,
   `conflicting-source-id`, `unsafe-promoted-from`, `missing-promoted-from`,

@@ -72,7 +72,10 @@ The explicit frontmatter relationship used by knowledge metrics. An origin decla
 with one or more raw Markdown paths and inherits their origins. Distinct source IDs count
 once. Missing/invalid lineage is excluded and reported as a coverage gap, never guessed
 from path or filesystem dates. `lineage.problems` is the capped, deterministic
-`{path, reason}` diagnostic surface; it contains no raw body content.
+`{path, reason}` diagnostic surface (at most 20 entries); it contains no raw body content.
+`lineage.reasonCounts` is its uncapped aggregate: reason codes actually present, in sorted
+key order, mapped to positive integer counts over the whole problem set, `{}` when clean,
+summing to `unlineagedN + invalidN` — counts only, never additional paths or body content.
 _Avoid_: basename matching, Git-date fallback, counting publication as intake
 
 ### Security boundaries

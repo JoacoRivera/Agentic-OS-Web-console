@@ -342,6 +342,7 @@ test('knowledge intake deduplicates promotions by explicit lineage', () => {
     promotedN: 1,
     conflictingSourceIdsN: 0,
     futureDatedSourceIdsN: 0,
+    reasonCounts: {}, // clean lineage → empty histogram, not absent
     problems: [],
   });
 });
@@ -438,6 +439,17 @@ test('lineage metrics do not depend on Git and expose incomplete or conflicting 
     promotedN: 0,
     conflictingSourceIdsN: 1,
     futureDatedSourceIdsN: 1,
+    reasonCounts: {
+      'conflicting-source-id': 2,
+      'future-intake-date': 1,
+      'invalid-frontmatter': 1,
+      'invalid-source-id': 1,
+      'missing-lineage': 1,
+      'missing-promoted-from': 1,
+      'origin-and-promotion': 1,
+      'partial-origin': 1,
+      'unsafe-promoted-from': 1,
+    },
     problems: [
       { path: 'raw/conflict-a.md', reason: 'conflicting-source-id' },
       { path: 'raw/conflict-b.md', reason: 'conflicting-source-id' },
@@ -504,6 +516,7 @@ test('source_id must be a canonical UUID (any textual case, no other shape)', as
       promotedN: 0,
       conflictingSourceIdsN: 0,
       futureDatedSourceIdsN: 0,
+      reasonCounts: { 'invalid-source-id': 4 },
       problems: [
         { path: 'raw/invalid-legacy-label.md', reason: 'invalid-source-id' },
         { path: 'raw/invalid-no-hyphens.md', reason: 'invalid-source-id' },
@@ -531,6 +544,7 @@ test('knowledge_intake_date accepts only a lexical YYYY-MM-DD scalar', async () 
     m.lineage.problems.map(({ reason }) => reason),
     Array(7).fill('invalid-intake-date')
   );
+  assert.deepEqual(m.lineage.reasonCounts, { 'invalid-intake-date': 7 });
   assert.equal(m.series[29].v, 1);
   assert.equal(m.last30, 0); // the valid intake is 50 days old
 });
@@ -583,6 +597,11 @@ test('promotion cycles are invalid lineage, not infinite recursion', () => {
       .map(({ path: problemPath }) => problemPath),
     ['raw/loop-a.md', 'raw/loop-b.md', 'raw/self.md']
   );
+  // The histogram groups the same verdicts by reason, cycles included.
+  assert.deepEqual(graphMetrics.lineage.reasonCounts, {
+    'conflicting-source-id': 3,
+    'promotion-cycle': 3,
+  });
 });
 
 test('a source_id with different textual case and conflicting dates poisons its origins and inheritors', () => {
@@ -612,6 +631,38 @@ test('lineage problems are deterministically ordered and capped at 20', async ()
     Array.from({ length: 19 }, (_, i) => `wiki/item-${String(i).padStart(2, '0')}.md`)
   );
   assert.doesNotMatch(JSON.stringify(m.lineage.problems), /DO NOT EXPOSE THIS BODY/);
+});
+
+test('reasonCounts totals every problem, including the ones the cap hides', async () => {
+  const m = await computeMetrics(createConfig({ REPO_ROOT: problemCap }), now);
+  const { reasonCounts, problems, unlineagedN, invalidN } = m.lineage;
+  // 26 problems, only 20 sampled: the histogram is the uncapped view, so the
+  // six truncated files still show up in the counts.
+  assert.equal(problems.length, 20);
+  assert.deepEqual(reasonCounts, {
+    'invalid-frontmatter': 1,
+    'missing-lineage': 25,
+  });
+  const total = Object.values(reasonCounts).reduce((sum, n) => sum + n, 0);
+  assert.equal(total, unlineagedN + invalidN);
+  assert.ok(total > problems.length, 'histogram must outlive the problem cap');
+});
+
+test('reasonCounts is counts only — no paths, no bodies, deterministic key order', async () => {
+  const m = await computeMetrics(createConfig({ REPO_ROOT: bare }), now);
+  const { reasonCounts } = m.lineage;
+  assert.ok(Object.values(reasonCounts).every((n) => Number.isInteger(n) && n > 0));
+  // Keys are lineage reason strings only; nothing path-shaped or body-shaped.
+  assert.deepEqual(Object.keys(reasonCounts), [...Object.keys(reasonCounts)].sort());
+  assert.ok(Object.keys(reasonCounts).every((reason) => /^[a-z-]+$/.test(reason)));
+  const serialized = JSON.stringify(reasonCounts);
+  assert.doesNotMatch(serialized, /\.md/);
+  assert.doesNotMatch(serialized, /RAW BODY MUST NOT LEAK/);
+  // Sum is the coverage counters' own definition of "excluded".
+  assert.equal(
+    Object.values(reasonCounts).reduce((sum, n) => sum + n, 0),
+    m.lineage.unlineagedN + m.lineage.invalidN
+  );
 });
 
 test('a missing scan root is treated as an empty collection', async () => {
@@ -653,6 +704,7 @@ test('GET /api/metrics returns the documented fields', async () => {
   }
   assert.equal('targets' in m, false);
   assert.equal(m.wikiN, 6);
+  assert.ok('reasonCounts' in m.lineage); // survives JSON serialization
   assert.equal(m.series.length, 30);
   assert.equal(m.week.length, 7);
 });

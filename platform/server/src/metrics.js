@@ -159,6 +159,13 @@ function parseLineage(text) {
   try {
     file = matter(text);
   } catch {
+    // gray-matter inserts the file object into `matter.cache` *before* it
+    // parses, so a YAML failure leaves a `data: {}` stub behind. A later parse
+    // of identical text would hit that stub and downgrade this file from
+    // `invalid-frontmatter` to `missing-lineage` — a different verdict on the
+    // second /api/metrics request than on the first. Evict the poisoned entry:
+    // a file's lineage verdict must not depend on how often metrics ran.
+    delete matter.cache[text];
     return { kind: 'invalid', reason: LINEAGE_REASON.INVALID_FRONTMATTER };
   }
   const data = file.data;
@@ -190,6 +197,21 @@ function parseLineage(text) {
   return date
     ? { kind: 'origin', sourceId: sourceId.toLowerCase(), date }
     : { kind: 'invalid', reason: LINEAGE_REASON.INVALID_INTAKE_DATE };
+}
+
+/**
+ * Reason histogram over *every* lineage problem, not just the capped sample.
+ * `problems` stays a bounded 20-path diagnostic; `reasonCounts` describes the
+ * shape of the whole backlog so a truncated sample can never make the tail
+ * look empty. Counts only — no extra paths, no body text — and the values sum
+ * to `unlineagedN + invalidN`. Keys are sorted so the payload is byte-stable.
+ */
+function countByReason(problems) {
+  const counts = new Map();
+  for (const { reason } of problems) counts.set(reason, (counts.get(reason) ?? 0) + 1);
+  return Object.fromEntries(
+    [...counts].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+  );
 }
 
 async function computeKnowledgeLineage(repoRoot, pages, throughDay) {
@@ -336,6 +358,7 @@ async function computeKnowledgeLineage(repoRoot, pages, throughDay) {
       promotedN,
       conflictingSourceIdsN: conflictingIds.size,
       futureDatedSourceIdsN: futureIds.size,
+      reasonCounts: countByReason(problems),
       problems: problems.slice(0, LINEAGE_PROBLEM_LIMIT),
     },
   };

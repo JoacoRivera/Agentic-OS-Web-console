@@ -75,7 +75,11 @@ calendar dates, and future dates are invalid. Derived wiki pages declare `promot
 as one raw Markdown path or a list. Missing or invalid lineage is excluded rather than
 assigned a Git/mtime guess. `lineage` reports coverage counters plus at most 20
 deterministically ordered `{path, reason}` entries in `problems` (reason then path), with
-no file content. The chart states `Lineage incomplete` whenever
+no file content. `reasonCounts` groups the same defects without that cap: a key-sorted map
+of the reason codes actually present to positive integer counts, tallied over the full
+problem set before truncation, `{}` when lineage is clean, counts only (no paths, no
+content), and always summing to `unlineagedN + invalidN`. The chart states
+`Lineage incomplete` whenever
 `unlineagedN + invalidN > 0`, otherwise `Lineage complete`. See ADR-0003 for the stable
 reason codes, complete contract, and examples.
 

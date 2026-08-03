@@ -56,7 +56,11 @@ Files with absent, partial, unsafe, unresolved, or conflicting lineage are exclu
 from knowledge metrics. `/api/metrics.lineage` reports eligible, lineaged,
 unlineaged, invalid, promoted, conflicting-source, and future-dated-source counts
 so an incomplete backfill remains visible. Its `problems` field exposes at most 20
-objects containing only `{path, reason}`, sorted by reason and then path. Stable reason
+objects containing only `{path, reason}`, sorted by reason and then path. Its companion
+`reasonCounts` is an uncapped aggregate: a key-sorted map from each present reason code to
+a positive integer count over the complete problem set, `{}` when there are no problems.
+It contains neither paths nor body content, and its values sum to `unlineagedN + invalidN`.
+Stable reason
 codes are `invalid-frontmatter`, `missing-lineage`, `partial-origin`,
 `origin-and-promotion`, `invalid-source-id`, `invalid-intake-date`,
 `future-intake-date`, `conflicting-source-id`, `unsafe-promoted-from`,
