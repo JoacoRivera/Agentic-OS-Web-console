@@ -29,6 +29,16 @@ function secretMatches(presented, expected) {
 }
 
 /**
+ * True when a request reached the API through the configured proxy hostname.
+ * Only meaningful after hostOriginGuard has run (the secret was verified
+ * there); routes that must stay loopback-only even behind the authenticated
+ * proxy (ADR-0010 Family Health) consult it.
+ */
+export function isProxiedRequest(req, config) {
+  return config.PROXY_HOSTNAME !== null && hostnameOf(req.headers.host ?? '') === config.PROXY_HOSTNAME;
+}
+
+/**
  * DNS-rebinding / cross-origin defense (ADR-0005). Loopback bind is
  * necessary but insufficient: a browser page can still fetch() the API and
  * DNS rebinding defeats the Same-Origin Policy. So every /api request must

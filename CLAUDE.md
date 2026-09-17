@@ -17,7 +17,7 @@ The design record still governs the code and is where intent is settled:
 - `docs/plans/odysseus-web-console-2026-06-29.md` — the original implementation plan. It is a
   **historical** document: where it disagrees with an ADR (notably the growth chart), the ADR
   wins. `docs/plans/odysseus-web-console-next-2026-07-04.md` carries the live follow-up plan.
-- `docs/adr/0001..0009` — accepted architecture decisions. These are **binding invariants**,
+- `docs/adr/0001..0010` — accepted architecture decisions. These are **binding invariants**,
   not suggestions.
 
 ## What this project is
@@ -94,6 +94,17 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
    Status precedence (first match wins): `Missing links` > `Needs review` > `Unclassified` >
    `Stale` > `OK`. Classifying the ten existing workflows is P1 DoD. The registry is a
    discovery/quality signal, not a ceremony enforcer.
+
+6. **Family Health is a second repo root: read-only, opt-in, loopback-only** (ADR-0010).
+   `HEALTH_REPO_ROOT` names the separate private `Health-Management` clone (no default;
+   unset = section absent; never a path inside `REPO_ROOT`). Its own allowed roots are
+   `family-overview.md`, `members/`, `reference/`; `/api/docs/*` never reaches it. Every
+   `/api/family-health/*` request through `PROXY_HOSTNAME` is refused unless
+   `FAMILY_HEALTH_ALLOW_PROXY=true` (set on the VPS by owner decision, ADR-0010 amendment
+   2026-09-17; the tailnet holds only the owner's devices). No binaries served, no writes, no family-health data
+   in metrics/search/memory query/audit log, and the console never interprets a value
+   ("Data to raise with a physician, never a diagnosis"). Fixtures are synthetic; real
+   family data never enters this repo. Do not confuse it with "Memory Health".
 
 ## Domain language (use these exact terms)
 

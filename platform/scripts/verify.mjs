@@ -103,8 +103,13 @@ function run(cmd, args) {
 
 const port = await freePort();
 
+// Synthetic Family Health fixture (ADR-0010) — never the real record.
+const healthFixture = path.join(platformDir, 'server', 'test', 'fixtures', 'family-health');
+
 // --- checks against a real loopback boot ---
-const server = startServer({ PORT: String(port), HOST: '127.0.0.1' });
+// HEALTH_REPO_ROOT is forced empty so a developer's .env cannot turn the
+// "unset → 404" check into a false failure.
+const server = startServer({ PORT: String(port), HOST: '127.0.0.1', HEALTH_REPO_ROOT: '' });
 try {
   await server.waitListening();
   record('server boots and reports listening', true);
@@ -142,6 +147,12 @@ try {
 
   const rawGate = await req(port, { reqPath: '/api/docs/file?path=raw/anything.md' });
   record('raw content is hidden by default (403, ADR-0005)', rawGate.status === 403);
+
+  const fhUnset = await req(port, { reqPath: '/api/family-health/summary' });
+  record(
+    'family health is absent when HEALTH_REPO_ROOT is unset (404, ADR-0010)',
+    fhUnset.status === 404 && JSON.parse(fhUnset.body).error === 'family-health-not-configured'
+  );
 
   const search = await req(port, { reqPath: '/api/docs/search?q=memory' });
   record(
@@ -329,6 +340,7 @@ const proxied = startServer({
   HOST: '127.0.0.1',
   PROXY_HOSTNAME: 'aos-console.home.arpa',
   PROXY_SECRET: proxySecret,
+  HEALTH_REPO_ROOT: healthFixture,
 });
 try {
   await proxied.waitListening();
@@ -353,6 +365,31 @@ try {
     headers: { Host: 'aos-console.home.arpa', 'X-AOS-Proxy-Auth': proxySecret },
   });
   record('raw content stays hidden through the proxy by default (403)', rawProxied.status === 403);
+
+  // Family Health (ADR-0010): loopback-only even behind the authenticated proxy.
+  const fhLocal = await req(port, { reqPath: '/api/family-health/summary' });
+  record(
+    'family health (fixture root) serves on loopback (200) with the physician notice',
+    fhLocal.status === 200 && /never a diagnosis/.test(JSON.parse(fhLocal.body).notice)
+  );
+  const fhProxied = await req(port, {
+    reqPath: '/api/family-health/summary',
+    headers: { Host: 'aos-console.home.arpa', 'X-AOS-Proxy-Auth': proxySecret },
+  });
+  record(
+    'family health is refused through the proxy by default (403, ADR-0010)',
+    fhProxied.status === 403 && JSON.parse(fhProxied.body).error === 'family-health-proxy-refused'
+  );
+  const fhViaDocs = await req(port, {
+    reqPath: '/api/docs/file?path=' + encodeURIComponent('members/Ada Example/profile.md'),
+  });
+  record('the docs API cannot reach the health root (400)', fhViaDocs.status === 400);
+  const fhTraversal = await req(port, { reqPath: '/api/family-health/file?path=../../etc/passwd' });
+  record('family health path traversal is rejected (400)', fhTraversal.status === 400);
+  const fhBinary = await req(port, {
+    reqPath: '/api/family-health/file?path=' + encodeURIComponent('members/Ada Example/documents/2026-01-10_bloodwork.pdf'),
+  });
+  record('family health never serves original documents (404)', fhBinary.status === 404);
 } catch (err) {
   record('proxy mode boots and reports listening', false, err.message);
 } finally {
@@ -365,6 +402,32 @@ record(
   'PROXY_HOSTNAME without PROXY_SECRET refuses to start (non-zero exit)',
   halfExit !== 0 && halfExit !== null,
   `exit ${halfExit}`
+);
+
+// --- Family Health invalid configurations refuse to start (ADR-0010) ---
+const fhDeadFlag = startServer({
+  PORT: String(port),
+  HOST: '127.0.0.1',
+  HEALTH_REPO_ROOT: '',
+  FAMILY_HEALTH_ALLOW_PROXY: 'true',
+});
+const fhDeadExit = await fhDeadFlag.waitExit();
+record(
+  'FAMILY_HEALTH_ALLOW_PROXY without a health root refuses to start (non-zero exit)',
+  fhDeadExit !== 0 && fhDeadExit !== null && fhDeadFlag.stderr.includes('ADR-0010'),
+  `exit ${fhDeadExit}`
+);
+const fhInsideRepo = startServer({
+  PORT: String(port),
+  HOST: '127.0.0.1',
+  REPO_ROOT: platformDir,
+  HEALTH_REPO_ROOT: healthFixture,
+});
+const fhInsideExit = await fhInsideRepo.waitExit();
+record(
+  'HEALTH_REPO_ROOT inside the memory repo refuses to start (non-zero exit)',
+  fhInsideExit !== 0 && fhInsideExit !== null && fhInsideRepo.stderr.includes('ADR-0010'),
+  `exit ${fhInsideExit}`
 );
 
 // --- build ---

@@ -2,7 +2,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
-import { hostOriginGuard } from './security.js';
+import { hostOriginGuard, isProxiedRequest } from './security.js';
+import {
+  FamilyHealthNotConfiguredError,
+  FamilyHealthProxyRefusedError,
+  summarize as summarizeFamilyHealth,
+  listMembers as listFamilyMembers,
+  readMember as readFamilyMember,
+  collectPending as collectFamilyPending,
+  trendSeries as familyTrendSeries,
+  readHealthFile,
+} from './familyHealth.js';
 import { computeMetrics } from './metrics.js';
 import { buildDocsTree, readDocFile, searchDocs, findBacklinks } from './docs.js';
 import { queryMemory } from './memory.js';
@@ -37,6 +47,8 @@ export function createApp(config, { executor = createExecutor(config) } = {}) {
       proxyHostname: config.PROXY_HOSTNAME,
       repoRoot: config.REPO_ROOT,
       exposeRawContent: config.EXPOSE_RAW_CONTENT,
+      familyHealthConfigured: config.HEALTH_REPO_ROOT !== null,
+      familyHealthAllowProxy: config.FAMILY_HEALTH_ALLOW_PROXY,
       refreshMs: config.REFRESH_MS,
       now: new Date().toISOString(),
     });
@@ -253,6 +265,50 @@ export function createApp(config, { executor = createExecutor(config) } = {}) {
       res.end();
     }
   });
+
+  // Family Health (ADR-0010): a second repo root, read-only, loopback-only
+  // by default even behind the authenticated proxy. Unset root → 404 on every
+  // route. Error bodies carry codes; never a path or file content.
+  app.use('/api/family-health', (req, res, next) => {
+    if (config.HEALTH_REPO_ROOT === null) {
+      const err = new FamilyHealthNotConfiguredError();
+      return res.status(err.status).json({ error: err.code, message: err.message });
+    }
+    if (isProxiedRequest(req, config) && !config.FAMILY_HEALTH_ALLOW_PROXY) {
+      const err = new FamilyHealthProxyRefusedError();
+      return res.status(err.status).json({ error: err.code, message: err.message });
+    }
+    next();
+  });
+  const sendFamilyHealthError = (res, err) => {
+    if (err.name === 'PathSafetyError') {
+      res.status(400).json({ error: 'unsafe-path', message: err.message });
+    } else if (err.name === 'BadMemberError') {
+      res.status(400).json({ error: err.code, message: err.message });
+    } else if (err.code === 'ENOENT' || err.code === 'EISDIR' || err.code === 'ENOTDIR') {
+      res.status(404).json({ error: 'not-found', message: 'no such family health file' });
+    } else {
+      res.status(500).json({ error: 'family-health-failed', message: 'family health read failed' });
+    }
+  };
+  const familyHealthRoute = (handler) => async (req, res) => {
+    try {
+      res.json(await handler(req));
+    } catch (err) {
+      sendFamilyHealthError(res, err);
+    }
+  };
+  app.get('/api/family-health/summary', familyHealthRoute(() => summarizeFamilyHealth(config)));
+  app.get('/api/family-health/members', familyHealthRoute(async () => ({ members: await listFamilyMembers(config) })));
+  app.get('/api/family-health/member', familyHealthRoute((req) => readFamilyMember(config, req.query.name)));
+  app.get('/api/family-health/pending', familyHealthRoute(async (req) => {
+    const all = await collectFamilyPending(config);
+    if (typeof req.query.member !== 'string' || req.query.member === '') return all;
+    const items = all.items.filter((it) => it.member === req.query.member);
+    return { ...all, items, total: items.length };
+  }));
+  app.get('/api/family-health/trends', familyHealthRoute((req) => familyTrendSeries(config, req.query.member, req.query.marker)));
+  app.get('/api/family-health/file', familyHealthRoute((req) => readHealthFile(config, req.query.path)));
 
   app.use('/api', (req, res) => {
     res.status(404).json({ error: 'not-found' });

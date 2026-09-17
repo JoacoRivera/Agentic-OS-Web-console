@@ -10,6 +10,7 @@ import {
   ScrollText,
   Settings,
   BrainCircuit,
+  Users,
 } from 'lucide-react';
 
 /**
@@ -25,6 +26,9 @@ export const SECTIONS = [
   { id: 'review-queue', label: 'Review Queue', icon: Inbox, phase: 1 },
   { id: 'memory-health', label: 'Memory Health', icon: HeartPulse, phase: 1 },
   { id: 'activity', label: 'Activity', icon: Activity, phase: 1 },
+  // ADR-0010: a second repo root (the private Health-Management clone), not
+  // memory. "Family Health" ≠ "Memory Health" (lint cadence) — keep both names.
+  { id: 'family-health', label: 'Family Health', icon: Users, phase: 1 },
   { id: 'operations', label: 'Operations', icon: TerminalSquare, phase: 2 },
   { id: 'audit-log', label: 'Audit Log', icon: ScrollText, phase: 3 },
   { id: 'settings', label: 'Settings', icon: Settings, phase: 1 },

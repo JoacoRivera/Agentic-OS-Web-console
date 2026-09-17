@@ -175,6 +175,36 @@ skill or workflow but is neither. Two strict subtypes:
   no arbitrary shell, no headless Claude. (e.g. `npm run check:paths`.)
 _Avoid_: command, action (use "Operation"), task
 
+### Family Health (second repo root)
+
+**Family Health record**:
+The live family medical record read from the separate private `Health-Management` clone
+named by `HEALTH_REPO_ROOT` (`family-overview.md`, `members/<name>/`, `reference/`). It is a
+**second repo root**, never a memory root: it has its own allowed roots and path safety, is
+loopback-only by default even behind the proxy, and is read-only (ADR-0010). The memory
+repo's synthesized pages under `wiki/projects/family-health-tracker/` are cross-linked, not
+re-parsed; the 2026-07-23 raw snapshot is evidence, not a data source.
+_Avoid_: Memory Health (the lint-cadence section), health (ambiguous), mounting it under `raw/`
+
+**Member**:
+One `members/<name>/` folder in the Family Health record, identified by its folder name.
+The console lists what the folder holds (profile, timeline, exam notes, document names) and
+links the wiki page whose slug matches, when one exists.
+_Avoid_: patient, user
+
+**Exam note**:
+One dated `members/<name>/exams/YYYY-MM-DD_topic.md` file: header bullets, a `## Results`
+table (marker, result, unit, reference range as printed by that lab, flag), and a
+`## Follow-up` checklist. Rows are rendered verbatim; a trend point always carries its own
+note's unit and range. The console never interprets a value.
+_Avoid_: diagnosis, lab result (the note is the unit; a row is a result)
+
+**Pending item**:
+A deterministic signal read from the record: an unchecked `- [ ]` item, a bold
+`Pendiente`/`Pending` marker, a results row whose value is `Pending`, or an exam note whose
+original document is recorded as missing. Never inferred from clinical content.
+_Avoid_: task, todo (the console does not own them), follow-up (one of the sources, not the concept)
+
 ### Hosting
 
 **Platform Apps (static hosting)**:

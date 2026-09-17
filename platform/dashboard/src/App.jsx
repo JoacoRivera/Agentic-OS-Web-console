@@ -13,6 +13,7 @@ import MemoryHealthView from './views/MemoryHealthView.jsx';
 import MemoryQueryView from './views/MemoryQueryView.jsx';
 import ActivityView from './views/ActivityView.jsx';
 import SettingsView from './views/SettingsView.jsx';
+import FamilyHealthView from './views/FamilyHealthView.jsx';
 import { SECTIONS } from './sections.js';
 
 const DEFAULT_REFRESH_MS = 30000;
@@ -106,6 +107,16 @@ export default function App() {
     view = <MemoryHealthView metrics={metrics} metricsError={metricsError} />;
   } else if (sectionId === 'activity') {
     view = <ActivityView metrics={metrics} metricsError={metricsError} />;
+  } else if (sectionId === 'family-health') {
+    view = (
+      <FamilyHealthView
+        refreshKey={manualRefreshKey}
+        onOpenDoc={(path) => {
+          setDocRequest({ path, key: Date.now() });
+          setSectionId('documentation');
+        }}
+      />
+    );
   } else if (sectionId === 'operations') {
     view = (
       <OperationsView

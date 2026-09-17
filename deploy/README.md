@@ -30,6 +30,13 @@ contents, so ADR-0005 forbids serving it beyond localhost without auth. The amen
    reaches `127.0.0.1:8084` directly.
 4. Raw content stays hidden (`EXPOSE_RAW_CONTENT` unset). Authenticated users can start
    the allowlisted checks (`npm run verify`, `check:*`) behind dry-run + confirm.
+5. Family Health (ADR-0010) **is** served here by owner decision (amendment of
+   2026-09-17: only the owner's devices are on the tailnet). `setup-vps.sh` writes
+   `HEALTH_REPO_ROOT=/home/joaquin/projects/Health-Management` and
+   `FAMILY_HEALTH_ALLOW_PROXY=true` into `console.env` when that clone exists on the
+   host, and leaves the section off otherwise. The basic-auth password and the tailnet's
+   device list are the boundary for identifiable medical data — re-check both before
+   adding a device or sharing the password.
 
 ## Install / update
 

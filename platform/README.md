@@ -23,6 +23,7 @@ yet) — see ADR-0005.
 | `npm run check:workflows` | Registry inclusion + status roll-up vs an independent recount (ADR-0006/0007) |
 | `npm run check:skills` | Skill registry vs an independent recount, including exact `frontmatter.name` = directory conformance |
 | `npm run check:metrics-groundtruth` | `/api/metrics` vs an independent recount of the active filesystem roots (permanent check, ADR-0002) |
+| `npm run check:family-health` | Family Health record parses and stays confined to its own root; prints counts only; skips when `HEALTH_REPO_ROOT` is unset. **Not** in the executable allowlist (ADR-0010) |
 
 ## Test strategy
 
@@ -56,6 +57,8 @@ so copy `.env.example` to `.env` once (it sets `REPO_ROOT=~/projects/agentic-os`
 | `EXPOSE_RAW_CONTENT` | `false`                          | Gates raw **content** over HTTP only; raw metrics always computed (ADR-0005) |
 | `PROXY_HOSTNAME`     | unset                            | Exact DNS name served by an authenticating reverse proxy (e.g. `aos-console.home.arpa`). Requires `PROXY_SECRET` |
 | `PROXY_SECRET`       | unset                            | ≥ 32 chars; the proxy must send it as `X-AOS-Proxy-Auth`. Set with `PROXY_HOSTNAME` or not at all |
+| `HEALTH_REPO_ROOT`   | unset                            | Family Health record: the local `Health-Management` clone (ADR-0010). Unset = section absent. Must not be inside `REPO_ROOT` (or contain it) — startup refuses |
+| `FAMILY_HEALTH_ALLOW_PROXY` | `false`                   | `true` serves Family Health through the authenticated proxy. Requires `HEALTH_REPO_ROOT` and the `PROXY_*` pair, otherwise startup refuses |
 
 ## Metrics (`GET /api/metrics`)
 
@@ -130,6 +133,34 @@ The registry, `verify`, and `check:skills` report whatever count they observe; n
 an expected total. The 15 skills seen on 2026-07-30 are a dated snapshot under
 [ADR-0009](../docs/adr/0009-canonical-aos-skill-catalog-is-discovered.md), not a code
 constant.
+
+## Family Health (`GET /api/family-health/*`, ADR-0010)
+
+A read-only view over the owner's **separate private** family medical record
+(`Health-Management`: `family-overview.md`, `members/<name>/{profile,history}.md`,
+`members/<name>/exams/YYYY-MM-DD_topic.md`, `members/<name>/documents/`, `reference/`).
+It is a **second repo root** named by `HEALTH_REPO_ROOT`, never a memory root: its paths
+resolve with `paths.safeResolve` against that root and the allowed roots
+`family-overview.md`, `members/`, `reference/` only. `/api/docs/*` cannot reach it and it
+cannot reach the memory repo.
+
+| Route | Returns |
+| --- | --- |
+| `GET /api/family-health/summary` | one row per member folder (template excluded) with counts, the `family-overview.md` row, and the wiki page path when `wiki/projects/family-health-tracker/<slug>.md` exists |
+| `GET /api/family-health/members` | the member list |
+| `GET /api/family-health/member?name=` | profile fields, timeline entries, exam-note summaries, original documents **by name/size/absolute path only**, pending items, numeric markers |
+| `GET /api/family-health/pending[?member=]` | explicit signals only: unchecked `- [ ]` items, bold `Pendiente`/`Pending` markers, result rows whose value is `Pending`, exam notes whose original is recorded missing; plus `reference/*.md` checklists |
+| `GET /api/family-health/trends?member=&marker=` | numeric results for one marker across exam notes; each point carries the unit and reference range printed on its own note; non-numeric rows are counted as excluded |
+| `GET /api/family-health/file?path=` | one Markdown file inside the health root (binaries → 404) |
+
+Gates, in order: unset `HEALTH_REPO_ROOT` → `404 family-health-not-configured` on every
+route; a request through `PROXY_HOSTNAME` → `403 family-health-proxy-refused` unless
+`FAMILY_HEALTH_ALLOW_PROXY=true` (loopback-only by default, even behind the authenticated
+proxy); path safety → `400`. Error bodies carry codes, never paths or content. Family-health
+data never enters metrics, docs search, memory query, the Operations catalog, or the audit
+log. The console renders rows verbatim and computes only counts, dates and series — every
+clinical pane carries "Data to raise with a physician, never a diagnosis." Fixtures under
+`server/test/fixtures/family-health/` are synthetic.
 
 ## Legacy HUD retirement (completed 2026-07-30)
 

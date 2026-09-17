@@ -1460,3 +1460,132 @@ svg.growth {
   padding-top: 14px;
   border-top: 1px solid var(--line);
 }
+
+/* ---- family health (ADR-0010) ---- */
+
+.fh-notice {
+  margin-bottom: 4px;
+}
+
+.fh-stats {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 1100px) {
+  .fh-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.fh-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.search-hit.fh-selected {
+  background: color-mix(in srgb, var(--accent) 12%, var(--panel));
+}
+
+.fh-member-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.fh-member-name {
+  font-size: 14px;
+  color: var(--text);
+  margin-bottom: 2px;
+}
+
+.fh-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.fh-tabs .tree-row {
+  width: auto;
+}
+
+.fh-bullets {
+  margin: 6px 0 10px;
+  padding-left: 18px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text);
+}
+
+.fh-table th {
+  padding: 4px 8px 4px 0;
+  text-align: left;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+
+.fh-table td:first-child {
+  color: var(--text);
+}
+
+.fh-entry {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.fh-entry:last-child {
+  border-bottom: 0;
+}
+
+.fh-entry-title {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.fh-foot {
+  margin-top: 10px;
+  font-size: 10px;
+}
+
+.fh-trend-bar {
+  margin-bottom: 8px;
+}
+
+.fh-trend-caption {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.fh-select {
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.link-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent-2);
+  font-family: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.badge.fh-kind-checkbox { color: var(--yellow); border: 1px solid color-mix(in srgb, var(--yellow) 50%, transparent); }
+.badge.fh-kind-marker { color: var(--accent-2); border: 1px solid var(--accent); }
+.badge.fh-kind-pending-result { color: var(--blue); border: 1px solid color-mix(in srgb, var(--blue) 50%, transparent); }
+.badge.fh-kind-original-missing { color: var(--purple); border: 1px solid color-mix(in srgb, var(--purple) 50%, transparent); }

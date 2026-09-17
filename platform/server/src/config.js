@@ -69,12 +69,42 @@ function proxyFromEnv(env) {
   return { hostname, secret: env.PROXY_SECRET };
 }
 
+const expandHome = (value, env) => path.resolve(value.replace(/^~(?=\/|$)/, env.HOME ?? '~'));
+
+const isInside = (child, parent) => child === parent || child.startsWith(parent + path.sep);
+
+/**
+ * ADR-0010: the Family Health record is a second, optional repo root with no
+ * default. It must never sit inside the memory repo (the 2026-07-23 raw
+ * snapshot is evidence, not a data source) nor contain it.
+ */
+function healthRootFromEnv(env, repoRoot) {
+  if (env.HEALTH_REPO_ROOT === undefined || env.HEALTH_REPO_ROOT === '') return null;
+  const root = expandHome(env.HEALTH_REPO_ROOT, env);
+  if (isInside(root, repoRoot) || isInside(repoRoot, root)) {
+    throw new Error(
+      'Invalid HEALTH_REPO_ROOT (ADR-0010): the Family Health record must be a separate ' +
+        'clone, not a path inside the memory repo (or one containing it).'
+    );
+  }
+  return root;
+}
+
 /**
  * Build the runtime config from an env object. All tunables live here
  * (single source); nothing else reads process.env.
  */
 export function createConfig(env = process.env) {
   const proxy = proxyFromEnv(env);
+  const repoRoot = env.REPO_ROOT ? expandHome(env.REPO_ROOT, env) : path.resolve(__dirname, '../../..');
+  const healthRoot = healthRootFromEnv(env, repoRoot);
+  const familyHealthAllowProxy = env.FAMILY_HEALTH_ALLOW_PROXY === 'true';
+  if (familyHealthAllowProxy && (healthRoot === null || proxy.hostname === null)) {
+    throw new Error(
+      'Invalid FAMILY_HEALTH_ALLOW_PROXY (ADR-0010): it requires both HEALTH_REPO_ROOT and a ' +
+        'configured PROXY_HOSTNAME/PROXY_SECRET pair; on its own it is dead configuration.'
+    );
+  }
   return {
     PORT: Number(env.PORT ?? 3001),
     HOST: env.HOST ?? '127.0.0.1',
@@ -88,9 +118,12 @@ export function createConfig(env = process.env) {
     PROXY_SECRET: proxy.secret,
     // Default assumes platform/ lives inside the Agentic OS repo
     // (repo root = ../../.. from server/src). Overridable for dev/tests.
-    REPO_ROOT: env.REPO_ROOT
-      ? path.resolve(env.REPO_ROOT.replace(/^~(?=\/|$)/, env.HOME ?? '~'))
-      : path.resolve(__dirname, '../../..'),
+    REPO_ROOT: repoRoot,
+    // ADR-0010: optional live Family Health record (separate private clone).
+    // null = section absent. Never inside REPO_ROOT. Loopback-only unless the
+    // owner sets FAMILY_HEALTH_ALLOW_PROXY together with the proxy pair.
+    HEALTH_REPO_ROOT: healthRoot,
+    FAMILY_HEALTH_ALLOW_PROXY: familyHealthAllowProxy,
     // Audit sink (gitignored): P3 execution appends here; P1 only tails it.
     AUDIT_LOG_PATH: env.AUDIT_LOG_PATH
       ? path.resolve(env.AUDIT_LOG_PATH)

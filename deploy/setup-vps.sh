@@ -19,6 +19,10 @@ REPO_ROOT="/home/joaquin/projects/agentic-os"
 ANSWER="100.93.128.49"
 ADGUARD="http://100.93.128.49:8080"
 ENV_FILE="/etc/aos-console/console.env"
+# Family Health (ADR-0010, amendment 2026-09-17): the owner chose to serve the
+# section on the tailnet because only their own devices are on it. Written
+# only when the private clone is present on this host.
+HEALTH_REPO_ROOT="/home/joaquin/projects/Health-Management"
 USERS_FILE="/etc/caddy/aos-console-users.caddy"
 PROXY_FILE="/etc/caddy/aos-console-proxy.caddy"
 CADDYFILE="/etc/caddy/Caddyfile"
@@ -43,6 +47,14 @@ else
 	echo "    keeping the existing proxy secret"
 fi
 
+FAMILY_HEALTH_LINES=""
+if [[ -d "$HEALTH_REPO_ROOT/members" ]]; then
+	FAMILY_HEALTH_LINES=$'HEALTH_REPO_ROOT='"$HEALTH_REPO_ROOT"$'\nFAMILY_HEALTH_ALLOW_PROXY=true'
+	echo "    family health: serving $HEALTH_REPO_ROOT through the proxy (ADR-0010 amendment)"
+else
+	echo "    family health: clone not found at $HEALTH_REPO_ROOT — section left off"
+fi
+
 sudo install -d -m 755 -o root -g root /etc/aos-console
 sudo install -m 640 -o root -g joaquin /dev/stdin "$ENV_FILE" <<ENV
 HOST=127.0.0.1
@@ -50,6 +62,7 @@ PORT=$PORT
 REPO_ROOT=$REPO_ROOT
 PROXY_HOSTNAME=$NAME
 PROXY_SECRET=$SECRET
+$FAMILY_HEALTH_LINES
 ENV
 
 # --------------------------------------------------------------- Service ----
