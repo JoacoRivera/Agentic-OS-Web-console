@@ -13,7 +13,7 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 
 ## The external Agentic OS memory repo
 
-This console operates on a **separate** repository — the Agentic OS Markdown memory wiki at `~/agents/agentic-os` (`raw/` captures → polished `wiki/`, operated by an LLM harness). When a task touches what the console reads (memory tiers, Skills under `.claude/skills/`, or workflows under `wiki/workflows/`), consult that repo's `~/agents/agentic-os/AGENTS.md` for its conventions and ubiquitous language. Treat it as a secondary domain source — it is the system this console describes, not part of this repo's tree.
+This console operates on a **separate** repository — the Agentic OS Markdown memory wiki at `~/projects/agentic-os` (`raw/` captures → polished `wiki/`, operated by an LLM harness). When a task touches what the console reads (memory tiers, Skills under `.claude/skills/`, or workflows under `wiki/workflows/`), consult that repo's `~/projects/agentic-os/AGENTS.md` for its conventions and ubiquitous language. Treat it as a secondary domain source — it is the system this console describes, not part of this repo's tree.
 
 ## File structure
 

@@ -20,7 +20,7 @@ configured.
 - Node.js 22.9 or newer.
 - npm.
 - A local Agentic OS memory repository. By default this project expects it at
-  `~/agents/agentic-os` via `platform/.env`.
+  `~/projects/agentic-os` via `platform/.env`.
 
 ## Setup
 
@@ -70,7 +70,7 @@ systemd services alone do not prevent WSL from idle-terminating.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `REPO_ROOT` | `../../..` from `platform/server/src` | Path to the Agentic OS memory repo. Use `~/agents/agentic-os` when this console is checked out separately. |
+| `REPO_ROOT` | `../../..` from `platform/server/src` | Path to the Agentic OS memory repo. Use `~/projects/agentic-os` when this console is checked out separately. |
 | `PORT` | `3001` | Express server port. |
 | `HOST` | `127.0.0.1` | Bind host. Non-loopback hosts fail startup because no auth layer exists. |
 | `LOCAL_HOSTNAME` | unset | One explicit local browser alias. Prefer a `.localhost` name, which resolves to loopback automatically. |

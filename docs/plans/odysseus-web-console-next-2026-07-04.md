@@ -25,7 +25,7 @@ amendment it would require. Phase numbers continue from the original plan.
   only, ADR-0006). *Update, same day:* the memory repo cleared most of it —
   9/10 now OK, with `manual-operations.md` still `needs-review` (no stated
   verification). Clearing the rest stays content work in
-  `~/agents/agentic-os`; the console's job (P4.4) is to make the "why" and
+  `~/projects/agentic-os`; the console's job (P4.4) is to make the "why" and
   the fix path more actionable.
 
 ## Phase 4 — Operate & harden (no new ADRs)

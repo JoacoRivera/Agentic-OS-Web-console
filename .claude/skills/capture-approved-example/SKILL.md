@@ -10,7 +10,7 @@ investigation, or fix produced while building the `agentic-os-web-console` is
 approved and should be remembered. It is the **capture half** of the memory loop,
 run from this working repo: it writes **one** raw source file into the external
 Agentic OS memory as a `Status: Draft`. The downstream `/promote-draft-memory` and
-`/ingest` skills — run **inside** `~/agents/agentic-os` — later triage and promote
+`/ingest` skills — run **inside** `~/projects/agentic-os` — later triage and promote
 durable facts into `wiki/`.
 
 This is the bridge variant of the Agentic OS `capture-approved-example` skill,
@@ -26,10 +26,10 @@ example without dumping transcript noise — suitable for later `/ingest`.
 ## Rules
 
 - **Write into the memory repo, not this code repo.** All `raw/` paths are under
-  the Agentic OS memory root `~/agents/agentic-os`. Never write memory into
+  the Agentic OS memory root `~/projects/agentic-os`. Never write memory into
   `agentic-os-web-console`.
-- Do not edit `~/agents/agentic-os/wiki/` directly.
-- Do not modify existing `~/agents/agentic-os/raw/` files. Create a new file only.
+- Do not edit `~/projects/agentic-os/wiki/` directly.
+- Do not modify existing `~/projects/agentic-os/raw/` files. Create a new file only.
 - Preserve facts exactly. Do not invent missing dates, owners, paths, files, or
   verification results — leave them blank and record under **Open questions**.
 - Do not promote a single example into a general rule.
@@ -47,7 +47,7 @@ example without dumping transcript noise — suitable for later `/ingest`.
 This project's captures go to:
 
 ```text
-~/agents/agentic-os/raw/projects/agentic-os-web-console/examples/
+~/projects/agentic-os/raw/projects/agentic-os-web-console/examples/
 ```
 
 If that `examples/` directory does not exist yet, create it before writing. Do not
@@ -130,7 +130,7 @@ Then **always prompt the user to manually triage and ingest it from the memory
 repo** (not from this repo):
 
 > Approved example captured to the Agentic OS memory. To review and promote it,
-> from `~/agents/agentic-os` run:
+> from `~/projects/agentic-os` run:
 > `/promote-draft-memory <path>` then, once approved, `/ingest <path>`.
 
 Do not run either yourself — wait for the user.

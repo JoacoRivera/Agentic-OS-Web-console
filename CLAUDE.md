@@ -141,4 +141,4 @@ Five canonical roles using their default label names (`needs-triage`, `needs-inf
 
 ### Domain docs
 
-Single-context: `docs/CONTEXT.md` + `docs/adr/`, plus the external Agentic OS memory repo at `~/agents/agentic-os` (`AGENTS.md`) as a secondary domain source. See `docs/agents/domain.md`.
+Single-context: `docs/CONTEXT.md` + `docs/adr/`, plus the external Agentic OS memory repo at `~/projects/agentic-os` (`AGENTS.md`) as a secondary domain source. See `docs/agents/domain.md`.

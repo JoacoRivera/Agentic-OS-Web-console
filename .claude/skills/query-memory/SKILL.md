@@ -23,7 +23,7 @@ project. If anything here conflicts with the memory repo's `AGENTS.md`, follow
      invariants). Read the ADRs that touch the area you're about to work in.
    - `docs/plans/odysseus-web-console-2026-06-29.md` — the implementation plan.
 
-2. **The external Agentic OS wiki** at `~/agents/agentic-os` — the synthesized
+2. **The external Agentic OS wiki** at `~/projects/agentic-os` — the synthesized
    long-term memory the console is built around. Relevant locations:
    - `wiki/projects/agentic-os-web-console.md` — the project memory page. **Read
      this first** of the external sources; it summarizes the six decisions and
@@ -38,8 +38,8 @@ project. If anything here conflicts with the memory repo's `AGENTS.md`, follow
 
 ## Rules
 
-- **Read-only.** Do not edit any file in this repo or in `~/agents/agentic-os`.
-- Do not read or modify `~/agents/agentic-os/raw/` unless the user asks for
+- **Read-only.** Do not edit any file in this repo or in `~/projects/agentic-os`.
+- Do not read or modify `~/projects/agentic-os/raw/` unless the user asks for
   source-level traceability — prefer the polished `wiki/`.
 - Prefer `docs/CONTEXT.md` + `docs/adr/` (in-repo) and
   `wiki/projects/agentic-os-web-console.md` (external) before broad searching.
@@ -54,10 +54,10 @@ project. If anything here conflicts with the memory repo's `AGENTS.md`, follow
 ## Workflow
 
 1. Read the relevant `docs/CONTEXT.md` / `docs/adr/` / plan sections in this repo.
-2. Read `~/agents/agentic-os/wiki/projects/agentic-os-web-console.md`.
-3. Use `~/agents/agentic-os/wiki/index.md` to locate any other relevant pages and
+2. Read `~/projects/agentic-os/wiki/projects/agentic-os-web-console.md`.
+3. Use `~/projects/agentic-os/wiki/index.md` to locate any other relevant pages and
    read them.
-4. Optionally inspect `~/agents/agentic-os/wiki/log.md` for recent changes.
+4. Optionally inspect `~/projects/agentic-os/wiki/log.md` for recent changes.
 5. Synthesize the answer from these sources.
 6. Note missing details, open questions, and any in-repo vs. external conflicts.
 7. Suggest whether a new capture should be created.
