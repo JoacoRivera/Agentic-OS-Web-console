@@ -193,11 +193,20 @@ links the wiki page whose slug matches, when one exists.
 _Avoid_: patient, user
 
 **Exam note**:
-One dated `members/<name>/exams/YYYY-MM-DD_topic.md` file: header bullets, a `## Results`
-table (marker, result, unit, reference range as printed by that lab, flag), and a
-`## Follow-up` checklist. Rows are rendered verbatim; a trend point always carries its own
-note's unit and range. The console never interprets a value.
-_Avoid_: diagnosis, lab result (the note is the unit; a row is a result)
+One dated `members/<name>/exams/YYYY-MM-DD_topic.md` file: header bullets, usually a
+`## Results` table (marker, result, unit, reference range as printed by that lab, flag), and
+a `## Follow-up` checklist. Rows are rendered verbatim; a trend point always carries its own
+note's unit and range. The console never interprets a value. Two shapes, told apart by a
+literal test (a table with both a result column and a reference-range column):
+- **Results note** — has a results-shaped table; feeds the results list, flagged counts,
+  markers and Trends.
+- **Narrative note** — has none (a visit, ultrasound, or prescription note as found on the
+  live record, 2026-09-17). It gets its own list under the member file with a per-section
+  *outline*: headings, counts of fields/bullets/checkboxes/lines, and table headers with row
+  counts — never a sentence or a cell value. The note itself opens verbatim in the Note
+  panel. It feeds no trend and no flagged count; its pending signals are read like any other.
+_Avoid_: diagnosis, lab result (the note is the unit; a row is a result), "note without a
+results table" as a status (it is a shape, not a defect)
 
 **Pending item**:
 A deterministic signal read from the record: an unchecked `- [ ]` item, a bold

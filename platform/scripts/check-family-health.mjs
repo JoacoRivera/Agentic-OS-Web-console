@@ -66,7 +66,7 @@ for (const m of members) {
   if (!file.profileMissing) profiles++;
   if (!file.historyMissing) histories++;
   exams += file.exams.length;
-  examsWithoutResults += file.exams.filter((e) => !e.hasResultsTable).length;
+  examsWithoutResults += file.exams.filter((e) => e.kind === 'narrative').length;
   originalsMissing += file.stats.originalsMissingN;
   documents += file.documents.length;
   if (m.wikiPath) wikiLinked++;
@@ -74,7 +74,7 @@ for (const m of members) {
 record('every member has profile.md', profiles === members.length, `${profiles}/${members.length}`);
 record('every member has history.md', histories === members.length, `${histories}/${members.length}`);
 record('every member is listed in family-overview.md', members.every((m) => overview.rows.some((r) => r.member.toLowerCase() === m.name.toLowerCase())));
-record('exam notes parsed', true, `${exams} notes · ${examsWithoutResults} without a results table · ${originalsMissing} originals recorded missing · ${documents} originals listed`);
+record('exam notes parsed', true, `${exams} notes · ${examsWithoutResults} narrative (no results-shaped table) · ${originalsMissing} originals recorded missing · ${documents} originals listed`);
 record('wiki cross-links resolved where a member page exists', true, `${wikiLinked}/${members.length} members linked`);
 
 const pending = await collectPending(config);
@@ -83,7 +83,7 @@ record('pending items collected from explicit signals only', Array.isArray(pendi
 const summary = await summarize(config);
 record(
   'summary totals agree with the per-member recount',
-  summary.totals.membersN === members.length && summary.totals.examsN === exams && summary.totals.documentsN === documents && summary.totals.originalsMissingN === originalsMissing
+  summary.totals.membersN === members.length && summary.totals.examsN === exams && summary.totals.narrativeN === examsWithoutResults && summary.totals.documentsN === documents && summary.totals.originalsMissingN === originalsMissing
 );
 record('summary carries the physician notice', /never a diagnosis/.test(summary.notice));
 

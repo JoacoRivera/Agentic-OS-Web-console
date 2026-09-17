@@ -1585,6 +1585,40 @@ svg.growth {
   text-decoration: underline;
 }
 
+.fh-narrative .search-hit {
+  width: 100%;
+}
+
+.fh-outline {
+  list-style: none;
+  margin: 4px 0 2px;
+  padding: 0 0 0 10px;
+  border-left: 1px solid var(--line);
+}
+
+.fh-outline li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  padding: 2px 0;
+  font-size: 10px;
+}
+
+.fh-outline-heading {
+  color: var(--text);
+}
+
+.fh-outline-chip {
+  color: var(--muted);
+}
+
+.fh-outline-chip::before {
+  content: '·';
+  margin-right: 6px;
+  color: var(--dim);
+}
+
 .badge.fh-kind-checkbox { color: var(--yellow); border: 1px solid color-mix(in srgb, var(--yellow) 50%, transparent); }
 .badge.fh-kind-marker { color: var(--accent-2); border: 1px solid var(--accent); }
 .badge.fh-kind-pending-result { color: var(--blue); border: 1px solid color-mix(in srgb, var(--blue) 50%, transparent); }

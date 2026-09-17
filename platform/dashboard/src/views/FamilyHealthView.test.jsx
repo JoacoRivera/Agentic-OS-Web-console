@@ -59,10 +59,33 @@ const memberFile = {
     lastReviewed: '2026-03-05',
   },
   history: [{ date: '2026-03-05', title: 'Bloodwork follow-up', line: 5, fields: [] }],
-  exams: [{ path: 'members/Ada Example/exams/2026-03-05_bloodwork.md', name: '2026-03-05_bloodwork.md', date: '2026-03-05', title: 'Bloodwork follow-up — Ada Example', type: 'Bloodwork', facility: 'Fixture Lab B', flaggedN: 1, openFollowUpsN: 2, originalMissing: true, hasResultsTable: true }],
+  exams: [
+    { path: 'members/Ada Example/exams/2026-03-05_bloodwork.md', name: '2026-03-05_bloodwork.md', date: '2026-03-05', title: 'Bloodwork follow-up — Ada Example', type: 'Bloodwork', facility: 'Fixture Lab B', resultsN: 4, flaggedN: 1, openFollowUpsN: 2, originalMissing: true, kind: 'results', hasResultsTable: true, sections: [] },
+    {
+      path: 'members/Ada Example/exams/2026-03-20_ultrasound.md',
+      name: '2026-03-20_ultrasound.md',
+      date: '2026-03-20',
+      title: 'Ultrasound — Ada Example',
+      type: 'Abdominal ultrasound (fixture)',
+      facility: 'Fixture Imaging',
+      orderedBy: 'Dr. Fixture',
+      reason: 'Routine check (fixture)',
+      resultsN: 0,
+      flaggedN: 0,
+      openFollowUpsN: 1,
+      originalMissing: false,
+      kind: 'narrative',
+      hasResultsTable: false,
+      sections: [
+        { heading: 'Findings', line: 10, fieldsN: 2, bulletsN: 1, checkboxesN: 0, openCheckboxesN: 0, tables: [], paragraphsN: 1 },
+        { heading: 'Measurements', line: 17, fieldsN: 0, bulletsN: 0, checkboxesN: 0, openCheckboxesN: 0, tables: [{ headers: ['Item', 'Result'], rowsN: 2 }], paragraphsN: 0 },
+        { heading: 'Follow-up', line: 24, fieldsN: 0, bulletsN: 0, checkboxesN: 1, openCheckboxesN: 1, tables: [], paragraphsN: 0 },
+      ],
+    },
+  ],
   documents: [{ name: '2026-01-10_bloodwork.pdf', ext: 'pdf', size: 2048, absolutePath: '/health/members/Ada Example/documents/2026-01-10_bloodwork.pdf' }],
   markers: [{ marker: 'Ferritin', n: 2 }],
-  stats: { examsN: 2, medicationsN: 2, pendingN: 7, lastExamDate: '2026-03-05' },
+  stats: { examsN: 2, narrativeN: 1, medicationsN: 2, pendingN: 7, lastExamDate: '2026-03-05' },
 };
 
 const json = (body, status = 200) => ({ ok: status < 400, status, json: async () => body });
@@ -136,6 +159,48 @@ describe('FamilyHealthView', () => {
     await user.click(screen.getByText('Documents · 1'));
     expect(screen.getByText('2026-01-10_bloodwork.pdf')).toBeInTheDocument();
     expect(screen.getByText(/never served over HTTP/)).toBeInTheDocument();
+  });
+
+  test('narrative notes (no results table) get their own tab with a section outline and open verbatim', async () => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch([
+      ['/api/family-health/summary', () => json(summary)],
+      ['/api/family-health/pending', () => json(pending)],
+      ['/api/family-health/member?name=Ada%20Example', () => json(memberFile)],
+      ['/api/family-health/file?path=members%2FAda%20Example%2Fprofile.md', () => json({ name: 'profile.md', path: 'members/Ada Example/profile.md', absolutePath: '/health/members/Ada Example/profile.md', markdown: '# Profile\n', mtime: '2026-03-05T00:00:00.000Z' })],
+      ['/api/family-health/file?path=members%2FAda%20Example%2Fexams%2F2026-03-20_ultrasound.md', () => json({ name: '2026-03-20_ultrasound.md', path: 'members/Ada Example/exams/2026-03-20_ultrasound.md', absolutePath: '/health/x.md', markdown: '# Ultrasound\n\nVerbatim fixture body.\n', mtime: '2026-03-20T00:00:00.000Z' })],
+    ]);
+    render(<FamilyHealthView onOpenDoc={() => {}} />);
+    await waitFor(() => expect(screen.getByTitle('members/Ada Example')).toBeInTheDocument());
+    await user.click(screen.getByTitle('members/Ada Example'));
+    await waitFor(() => expect(screen.getByText('Exam notes · 1')).toBeInTheDocument());
+    expect(screen.getByText('Narrative notes · 1')).toBeInTheDocument();
+    expect(screen.getByText(/2 exam notes \(1 narrative\)/)).toBeInTheDocument();
+
+    // The results list holds only the bloodwork note (the pending panel also links it, hence two).
+    await user.click(screen.getByText('Exam notes · 1'));
+    expect(screen.getAllByTitle('members/Ada Example/exams/2026-03-05_bloodwork.md')).toHaveLength(2);
+    expect(screen.queryByTitle('members/Ada Example/exams/2026-03-20_ultrasound.md')).not.toBeInTheDocument();
+
+    // The narrative view: header fields, section outline with counts and table headers, no body text.
+    await user.click(screen.getByText('Narrative notes · 1'));
+    const card = screen.getByTestId('narrative-2026-03-20_ultrasound.md');
+    expect(card).toHaveTextContent('Ultrasound — Ada Example');
+    expect(card).toHaveTextContent('Abdominal ultrasound (fixture) · Fixture Imaging · Dr. Fixture');
+    expect(card).toHaveTextContent('Routine check (fixture)');
+    expect(card).toHaveTextContent('Findings');
+    expect(card).toHaveTextContent('2 fields');
+    expect(card).toHaveTextContent('1 bullet');
+    expect(card).toHaveTextContent('1 line');
+    expect(card).toHaveTextContent('table Item · Result × 2 rows');
+    expect(card).toHaveTextContent('1 of 1 item open');
+    expect(card).toHaveTextContent('1 open');
+    expect(screen.getAllByTitle('members/Ada Example/exams/2026-03-05_bloodwork.md')).toHaveLength(1);
+    expect(screen.getByText(/nothing here feeds Trends/)).toBeInTheDocument();
+
+    await user.click(screen.getByTitle('members/Ada Example/exams/2026-03-20_ultrasound.md'));
+    expect(fetchMock).toHaveBeenCalledWith('/api/family-health/file?path=members%2FAda%20Example%2Fexams%2F2026-03-20_ultrasound.md');
+    await waitFor(() => expect(screen.getByText('Verbatim fixture body.')).toBeInTheDocument());
   });
 
   test('the Note panel follows the selected member instead of keeping the last opened note', async () => {

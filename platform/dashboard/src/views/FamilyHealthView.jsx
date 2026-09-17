@@ -103,6 +103,58 @@ function KeyValueTable({ rows }) {
   );
 }
 
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** One H2 section of a narrative note as counts and table headers — no body text. */
+function outlineChips(section) {
+  const chips = [];
+  if (section.fieldsN > 0) chips.push(plural(section.fieldsN, 'field'));
+  if (section.bulletsN > 0) chips.push(plural(section.bulletsN, 'bullet'));
+  for (const t of section.tables) chips.push(`table ${t.headers.join(' · ')} × ${plural(t.rowsN, 'row')}`);
+  if (section.checkboxesN > 0) chips.push(`${section.openCheckboxesN} of ${plural(section.checkboxesN, 'item')} open`);
+  if (section.paragraphsN > 0) chips.push(plural(section.paragraphsN, 'line'));
+  return chips.length ? chips : ['empty'];
+}
+
+/**
+ * Distinct view for an exam note without a results-shaped table: header
+ * fields plus a per-section outline (headings, counts, table headers), all
+ * as recorded. Clicking the head opens the note verbatim in the Note panel.
+ */
+function NarrativeNote({ note, onOpen }) {
+  const meta = [note.type, note.facility, note.orderedBy].filter(Boolean).join(' · ');
+  return (
+    <div className="fh-entry fh-narrative" data-testid={`narrative-${note.name}`}>
+      <button className="search-hit" onClick={() => onOpen(note.path)} title={note.path}>
+        <div className="search-hit-head">
+          <span className="run-time">{note.date ?? '—'}</span>
+          <span className="search-hit-path">{note.title}</span>
+          <span className="badge">narrative</span>
+          {note.openFollowUpsN > 0 && <span className="badge">{note.openFollowUpsN} open</span>}
+          {note.originalMissing && <span className="badge warn">original missing</span>}
+        </div>
+        <div className="search-snippet">{meta || note.name}</div>
+        {note.reason && (
+          <div className="search-snippet">
+            <span className="dim">Reason:</span> {note.reason}
+          </div>
+        )}
+      </button>
+      <ul className="fh-outline">
+        {note.sections.length === 0 && <li className="dim">No sections.</li>}
+        {note.sections.map((sec) => (
+          <li key={`${sec.line}-${sec.heading}`}>
+            <span className="fh-outline-heading">{sec.heading}</span>
+            {outlineChips(sec).map((c, i) => (
+              <span key={i} className="fh-outline-chip">{c}</span>
+            ))}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function MemberFile({ file, onOpenNote, onOpenDoc, onTrend, trend }) {
   const [tab, setTab] = useState('profile');
   const [marker, setMarker] = useState('');
@@ -113,10 +165,16 @@ function MemberFile({ file, onOpenNote, onOpenDoc, onTrend, trend }) {
 
   if (!file) return <div className="placeholder-body">Select a member.</div>;
   const { member, profile, history, exams, documents, markers, stats } = file;
+  // Exam notes split by shape: a results note has a results-shaped table
+  // (result + reference-range columns); a narrative note (visit, ultrasound,
+  // prescription, …) has none and gets its own view with a section outline.
+  const resultNotes = exams.filter((e) => e.kind !== 'narrative');
+  const narrativeNotes = exams.filter((e) => e.kind === 'narrative');
   const tabs = [
     ['profile', 'Profile'],
     ['timeline', `Timeline · ${history.length}`],
-    ['exams', `Exam notes · ${exams.length}`],
+    ['exams', `Exam notes · ${resultNotes.length}`],
+    ['narrative', `Narrative notes · ${narrativeNotes.length}`],
     ['documents', `Documents · ${documents.length}`],
     ['trends', 'Trends'],
   ];
@@ -127,7 +185,7 @@ function MemberFile({ file, onOpenNote, onOpenDoc, onTrend, trend }) {
         <div>
           <div className="fh-member-name">{member.name}</div>
           <div className="dim">
-            {stats.examsN} exam notes · {stats.medicationsN} medications · {stats.pendingN} pending
+            {stats.examsN} exam notes{stats.narrativeN > 0 ? ` (${stats.narrativeN} narrative)` : ''} · {stats.medicationsN} medications · {stats.pendingN} pending
             {stats.lastExamDate ? ` · last exam ${stats.lastExamDate}` : ''}
           </div>
         </div>
@@ -240,22 +298,42 @@ function MemberFile({ file, onOpenNote, onOpenDoc, onTrend, trend }) {
 
       {tab === 'exams' && (
         <div className="fh-list">
-          {exams.length === 0 && <div className="placeholder-body">No exam notes.</div>}
-          {[...exams].reverse().map((e) => (
+          {resultNotes.length === 0 && (
+            <div className="placeholder-body">
+              No exam notes with a results table.
+              {narrativeNotes.length > 0 ? ` ${narrativeNotes.length} narrative notes are listed under their own tab.` : ''}
+            </div>
+          )}
+          {[...resultNotes].reverse().map((e) => (
             <button key={e.path} className="search-hit" onClick={() => onOpenNote(e.path)} title={e.path}>
               <div className="search-hit-head">
                 <span className="run-time">{e.date ?? '—'}</span>
                 <span className="search-hit-path">{e.title}</span>
+                <span className="badge">{plural(e.resultsN, 'row')}</span>
                 {e.flaggedN > 0 && <span className="badge warn">{e.flaggedN} flagged</span>}
                 {e.openFollowUpsN > 0 && <span className="badge">{e.openFollowUpsN} open</span>}
                 {e.originalMissing && <span className="badge warn">original missing</span>}
-                {!e.hasResultsTable && <span className="badge">no results table</span>}
               </div>
               <div className="search-snippet">
                 {[e.type, e.facility].filter(Boolean).join(' · ') || e.name}
               </div>
             </button>
           ))}
+        </div>
+      )}
+
+      {tab === 'narrative' && (
+        <div className="fh-list">
+          {narrativeNotes.length === 0 && <div className="placeholder-body">Every exam note for this member has a results table.</div>}
+          {[...narrativeNotes].reverse().map((e) => (
+            <NarrativeNote key={e.path} note={e} onOpen={onOpenNote} />
+          ))}
+          {narrativeNotes.length > 0 && (
+            <div className="notice-compact fh-foot">
+              Narrative notes (visits, ultrasounds, prescriptions) carry no results-shaped table, so nothing here feeds Trends. The outline lists
+              what each note holds; the note itself opens verbatim in the Note panel.
+            </div>
+          )}
         </div>
       )}
 
@@ -390,7 +468,7 @@ export default function FamilyHealthView({ refreshKey = 0, onOpenDoc }) {
       <div className="notice-compact fh-notice">{notice} Read-only view of the private Health-Management clone; loopback-only (ADR-0010).</div>
       <div className="stat-grid fh-stats">
         <StatCard title="Members" tag="folders" value={totals.membersN} unit="members" detail={totals.lastExamDate ? `· last exam ${totals.lastExamDate}` : ''} />
-        <StatCard title="Exam notes" tag="dated notes" value={totals.examsN} unit="notes" detail={`· ${totals.documentsN} originals listed`} />
+        <StatCard title="Exam notes" tag="dated notes" value={totals.examsN} unit="notes" detail={`· ${totals.narrativeN ?? 0} narrative · ${totals.documentsN} originals listed`} />
         <StatCard title="Pending" tag="explicit signals" value={totals.pendingN} unit="items" detail={`· ${totals.openFollowUpsN} open follow-ups`} />
         <StatCard title="Flagged rows" tag="as printed by each lab" value={totals.flaggedN} unit="results" detail={`· ${totals.originalsMissingN} originals missing`} />
       </div>

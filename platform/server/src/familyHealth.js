@@ -190,6 +190,32 @@ function columnIndex(headers, wanted) {
   return lower.findIndex((h) => wanted.some((w) => h.includes(w)));
 }
 
+const PARAGRAPH_LINE_RE = /^\s*[-*|#>]/;
+
+/**
+ * Structural outline of one H2 section: heading, counts of key bullets, plain
+ * bullets, checkboxes and paragraph lines, and each table's headers with its
+ * row count. Cell values and sentences stay in the note.
+ */
+export function outlineSection(section) {
+  const fields = parseKeyBullets(section.lines).length;
+  const checkboxes = parseCheckboxes(section.lines);
+  const bullets = section.lines.filter((l) => BULLET_RE.test(l.text)).length - fields - checkboxes.length;
+  const tables = parseTables(section.lines);
+  // parseTables treats any line holding a pipe as a table line, so the same test keeps table rows out of the paragraph count.
+  const paragraphs = section.lines.filter((l) => l.text.trim() !== '' && !PARAGRAPH_LINE_RE.test(l.text) && !l.text.includes('|')).length;
+  return {
+    heading: section.heading,
+    line: section.startLine,
+    fieldsN: fields,
+    bulletsN: Math.max(0, bullets),
+    checkboxesN: checkboxes.length,
+    openCheckboxesN: checkboxes.filter((c) => !c.checked).length,
+    tables: tables.map((t) => ({ headers: t.headers.map(stripMd), rowsN: t.rows.length })),
+    paragraphsN: paragraphs,
+  };
+}
+
 /** One exam note → header, results rows (verbatim + numeric), follow-ups, pending signals. */
 export function parseExamNote(text, relPath) {
   const name = path.basename(relPath);
@@ -244,6 +270,12 @@ export function parseExamNote(text, relPath) {
   const followSection = findSection(sections, 'follow-up', 'seguimiento', 'pendiente');
   const followUps = followSection ? parseCheckboxes(followSection.lines) : [];
 
+  // A note with no results-shaped table is a *narrative* note (visit,
+  // ultrasound, prescription, …). Its distinct view is a per-section outline:
+  // headings plus counts and table headers, never body text — the note itself
+  // opens verbatim through /api/family-health/file.
+  const kind = tables.length > 0 ? 'results' : 'narrative';
+
   return {
     path: toPosix(relPath),
     name,
@@ -251,12 +283,14 @@ export function parseExamNote(text, relPath) {
     topic: fm ? fm[2].replaceAll('-', ' ') : name.replace(/\.md$/, ''),
     title: text.split(/\r?\n/).find((l) => l.startsWith('# '))?.slice(2).trim() ?? name,
     type: field('type', 'tipo'),
-    orderedBy: field('ordered by', 'solicitado'),
+    orderedBy: field('ordered', 'solicitado', 'performed', 'physician', 'médico', 'medico'),
     facility: field('facility', 'lab', 'laboratorio'),
     reason: field('reason', 'motivo'),
     originalDocument,
     originalMissing,
-    hasResultsTable: tables.length > 0,
+    kind,
+    hasResultsTable: kind === 'results',
+    sections: sections.slice(1).map(outlineSection),
     results,
     flaggedN: results.filter((r) => r.flagged).length,
     pendingResultsN: pendingResults,
@@ -483,7 +517,11 @@ const examSummary = ({ note }) => ({
   pendingResultsN: note.pendingResultsN,
   openFollowUpsN: note.openFollowUpsN,
   originalMissing: note.originalMissing,
+  kind: note.kind,
   hasResultsTable: note.hasResultsTable,
+  orderedBy: note.orderedBy,
+  reason: note.reason,
+  sections: note.sections,
 });
 
 /** One member's file: profile, timeline, exam summaries, documents, pending items, markers. */
@@ -537,6 +575,7 @@ export async function readMember(config, name) {
     markers,
     stats: {
       examsN: exams.length,
+      narrativeN: exams.filter((e) => e.note.kind === 'narrative').length,
       documentsN: documents.length,
       medicationsN: profile?.medications.length ?? 0,
       conditionsN: profile?.conditions.length ?? 0,
@@ -620,6 +659,7 @@ export async function summarize(config) {
     (t, r) => ({
       membersN: t.membersN + 1,
       examsN: t.examsN + r.examsN,
+      narrativeN: t.narrativeN + r.narrativeN,
       documentsN: t.documentsN + r.documentsN,
       medicationsN: t.medicationsN + r.medicationsN,
       openFollowUpsN: t.openFollowUpsN + r.openFollowUpsN,
@@ -628,7 +668,7 @@ export async function summarize(config) {
       pendingN: t.pendingN + r.pendingN,
       lastExamDate: [t.lastExamDate, r.lastExamDate].filter(Boolean).sort().at(-1) ?? null,
     }),
-    { membersN: 0, examsN: 0, documentsN: 0, medicationsN: 0, openFollowUpsN: 0, flaggedN: 0, originalsMissingN: 0, pendingN: 0, lastExamDate: null }
+    { membersN: 0, examsN: 0, narrativeN: 0, documentsN: 0, medicationsN: 0, openFollowUpsN: 0, flaggedN: 0, originalsMissingN: 0, pendingN: 0, lastExamDate: null }
   );
   return {
     notice: PHYSICIAN_NOTICE,

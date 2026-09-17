@@ -148,10 +148,16 @@ cannot reach the memory repo.
 | --- | --- |
 | `GET /api/family-health/summary` | one row per member folder (template excluded) with counts, the `family-overview.md` row, and the wiki page path when `wiki/projects/family-health-tracker/<slug>.md` exists |
 | `GET /api/family-health/members` | the member list |
-| `GET /api/family-health/member?name=` | profile fields, timeline entries, exam-note summaries, original documents **by name/size/absolute path only**, pending items, numeric markers |
+| `GET /api/family-health/member?name=` | profile fields, timeline entries, exam-note summaries (`kind: results \| narrative` plus a per-section outline of headings, counts and table headers — no body text), original documents **by name/size/absolute path only**, pending items, numeric markers |
 | `GET /api/family-health/pending[?member=]` | explicit signals only: unchecked `- [ ]` items, bold `Pendiente`/`Pending` markers, result rows whose value is `Pending`, exam notes whose original is recorded missing; plus `reference/*.md` checklists |
 | `GET /api/family-health/trends?member=&marker=` | numeric results for one marker across exam notes; each point carries the unit and reference range printed on its own note; non-numeric rows are counted as excluded |
 | `GET /api/family-health/file?path=` | one Markdown file inside the health root (binaries → 404) |
+
+An exam note with no results-shaped table (no table carrying both a result column and a
+reference-range column — visit, ultrasound and prescription notes on the live record) is a
+**narrative note**. The member file lists those under their own *Narrative notes* tab with a
+per-section outline; results notes stay under *Exam notes* and are the only ones feeding
+flagged counts, markers and Trends. `stats.narrativeN` / `totals.narrativeN` count them.
 
 Gates, in order: unset `HEALTH_REPO_ROOT` → `404 family-health-not-configured` on every
 route; a request through `PROXY_HOSTNAME` → `403 family-health-proxy-refused` unless
