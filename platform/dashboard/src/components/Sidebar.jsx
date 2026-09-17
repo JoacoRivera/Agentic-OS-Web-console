@@ -40,12 +40,6 @@ export default function Sidebar({ section, onSelect, ready, metrics }) {
           </button>
         ))}
       </nav>
-      <div className="sidebar-foot">
-        <div className="notice-compact">
-          Localhost-only private console — not safe for LAN/public exposure without auth
-          (ADR-0005)
-        </div>
-      </div>
     </aside>
   );
 }

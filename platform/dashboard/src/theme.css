@@ -143,11 +143,6 @@ a {
   margin-left: auto;
 }
 
-.sidebar-foot {
-  padding: 12px 16px 0;
-  border-top: 1px solid var(--line);
-}
-
 /* ---- topbar ---- */
 
 .topbar {
