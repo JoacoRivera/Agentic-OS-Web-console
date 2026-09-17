@@ -34,6 +34,7 @@ export function createApp(config, { executor = createExecutor(config) } = {}) {
       host: config.HOST,
       port: config.PORT,
       localHostname: config.LOCAL_HOSTNAME,
+      proxyHostname: config.PROXY_HOSTNAME,
       repoRoot: config.REPO_ROOT,
       exposeRawContent: config.EXPOSE_RAW_CONTENT,
       refreshMs: config.REFRESH_MS,

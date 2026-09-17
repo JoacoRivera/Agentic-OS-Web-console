@@ -59,6 +59,11 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
    prevents reading outside allowed roots; it does NOT make those roots safe to expose** —
    these are two different problems. The allowed roots are `wiki/`, `raw/`, `templates/`,
    `.claude/skills/`, and `AGENTS.md`.
+   **Tailnet proxy (ADR-0005 amendment, 2026-09-17):** the VPS serves the console at
+   `aos-console.home.arpa` through Caddy (`deploy/`). The bind stays loopback; Caddy
+   basic-auths every path and injects `X-AOS-Proxy-Auth`; the API trusts that exact
+   `PROXY_HOSTNAME` only with a matching `PROXY_SECRET`, and never mixes proxy and local
+   Origin allowlists. Do not widen it to wildcards, extra names, or a non-loopback bind.
 
 3. **Knowledge growth uses explicit lineage** (ADR-0003, amended 2026-07-27).
    An origin declares `source_id` + `knowledge_intake_date`; a derived wiki page declares

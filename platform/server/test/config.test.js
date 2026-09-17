@@ -41,6 +41,28 @@ test('LOCAL_HOSTNAME rejects DNS names and malformed aliases', () => {
   }
 });
 
+test('proxy config defaults to off and accepts one exact DNS name with a long secret', () => {
+  const off = createConfig({});
+  assert.equal(off.PROXY_HOSTNAME, null);
+  assert.equal(off.PROXY_SECRET, null);
+  const on = createConfig({ PROXY_HOSTNAME: 'AOS-Console.home.arpa', PROXY_SECRET: 'k'.repeat(32) });
+  assert.equal(on.PROXY_HOSTNAME, 'aos-console.home.arpa');
+  assert.equal(on.HOST, '127.0.0.1');
+});
+
+test('proxy config rejects half-configured, malformed, and weak settings', () => {
+  const secret = 'k'.repeat(32);
+  assert.throws(() => createConfig({ PROXY_HOSTNAME: 'aos-console.home.arpa' }), /set together/);
+  assert.throws(() => createConfig({ PROXY_SECRET: secret }), /set together/);
+  for (const PROXY_HOSTNAME of ['single-label', '*.home.arpa', 'a b.home.arpa', 'console.localhost', 'x.-bad.arpa']) {
+    assert.throws(() => createConfig({ PROXY_HOSTNAME, PROXY_SECRET: secret }), /Invalid PROXY_HOSTNAME/, PROXY_HOSTNAME);
+  }
+  assert.throws(
+    () => createConfig({ PROXY_HOSTNAME: 'aos-console.home.arpa', PROXY_SECRET: 'short' }),
+    /Invalid PROXY_SECRET/
+  );
+});
+
 test('EXPOSE_RAW_CONTENT only enables on the exact string "true"', () => {
   assert.equal(createConfig({ EXPOSE_RAW_CONTENT: 'true' }).EXPOSE_RAW_CONTENT, true);
   for (const v of ['1', 'yes', 'TRUE', '']) {

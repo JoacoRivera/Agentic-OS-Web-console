@@ -3,9 +3,9 @@
 import { createConfig, assertStartable } from './config.js';
 import { createApp } from './app.js';
 
-const config = createConfig();
-
+let config;
 try {
+  config = createConfig();
   assertStartable(config);
 } catch (err) {
   console.error(`[console] refusing to start: ${err.message}`);

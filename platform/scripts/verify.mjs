@@ -322,6 +322,51 @@ record(
   `exit ${exitCode}`
 );
 
+// --- authenticated proxy hostname (ADR-0005 amendment 2026-09-17) ---
+const proxySecret = 'verify-proxy-secret-'.padEnd(48, 'x');
+const proxied = startServer({
+  PORT: String(port),
+  HOST: '127.0.0.1',
+  PROXY_HOSTNAME: 'aos-console.home.arpa',
+  PROXY_SECRET: proxySecret,
+});
+try {
+  await proxied.waitListening();
+  const bound = proxied.stdout.match(/listening on http:\/\/([^:]+):(\d+)/);
+  record('proxy mode still binds loopback (127.0.0.1)', bound?.[1] === '127.0.0.1');
+  const noSecret = await req(port, { headers: { Host: 'aos-console.home.arpa' } });
+  record('proxy hostname without the proxy secret is rejected (403)', noSecret.status === 403);
+  const withSecret = await req(port, {
+    headers: { Host: 'aos-console.home.arpa', 'X-AOS-Proxy-Auth': proxySecret },
+  });
+  record('proxy hostname with the proxy secret is accepted (200)', withSecret.status === 200);
+  const crossProxied = await req(port, {
+    headers: {
+      Host: 'aos-console.home.arpa',
+      'X-AOS-Proxy-Auth': proxySecret,
+      Origin: 'https://evil.example',
+    },
+  });
+  record('proxied cross-origin Origin is rejected (403)', crossProxied.status === 403);
+  const rawProxied = await req(port, {
+    reqPath: '/api/docs/file?path=raw/anything.md',
+    headers: { Host: 'aos-console.home.arpa', 'X-AOS-Proxy-Auth': proxySecret },
+  });
+  record('raw content stays hidden through the proxy by default (403)', rawProxied.status === 403);
+} catch (err) {
+  record('proxy mode boots and reports listening', false, err.message);
+} finally {
+  await proxied.stop();
+}
+
+const halfProxy = startServer({ PORT: String(port), HOST: '127.0.0.1', PROXY_HOSTNAME: 'aos-console.home.arpa' });
+const halfExit = await halfProxy.waitExit();
+record(
+  'PROXY_HOSTNAME without PROXY_SECRET refuses to start (non-zero exit)',
+  halfExit !== 0 && halfExit !== null,
+  `exit ${halfExit}`
+);
+
 // --- build ---
 const build = await run('npm', ['run', 'build']);
 record('npm run build succeeds', build.code === 0, build.code === 0 ? '' : build.out.slice(-400));

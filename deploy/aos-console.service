@@ -1,0 +1,27 @@
+# Agentic OS web console, served on the tailnet at aos-console.home.arpa.
+#
+# The process still binds loopback only (ADR-0005). Caddy on the host
+# authenticates the browser and forwards the proxy secret; see Caddyfile.snippet.
+# Installed to /etc/systemd/system/aos-console.service by setup-vps.sh.
+[Unit]
+Description=Agentic OS web console
+After=network.target
+
+[Service]
+Type=simple
+User=joaquin
+Group=joaquin
+WorkingDirectory=/home/joaquin/projects/Agentic-OS-Web-console/platform
+# HOST, PORT, REPO_ROOT, PROXY_HOSTNAME, PROXY_SECRET. Mode 640 root:joaquin.
+# Values here win over platform/.env (node --env-file never overrides).
+EnvironmentFile=/etc/aos-console/console.env
+ExecStart=/usr/bin/node --env-file-if-exists=.env server/src/index.js
+Restart=on-failure
+RestartSec=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+
+[Install]
+WantedBy=multi-user.target

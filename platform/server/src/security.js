@@ -1,4 +1,8 @@
+import crypto from 'node:crypto';
 import { isAllowedLocalHostname } from './config.js';
+
+/** Header the authenticated reverse proxy injects (ADR-0005 amendment). */
+export const PROXY_SECRET_HEADER = 'x-aos-proxy-auth';
 
 function hostnameOf(hostHeader) {
   try {
@@ -16,6 +20,14 @@ function originHostname(originHeader) {
   }
 }
 
+function secretMatches(presented, expected) {
+  if (typeof presented !== 'string') return false;
+  // Hash both sides so timingSafeEqual sees equal lengths.
+  const a = crypto.createHash('sha256').update(presented).digest();
+  const b = crypto.createHash('sha256').update(expected).digest();
+  return crypto.timingSafeEqual(a, b);
+}
+
 /**
  * DNS-rebinding / cross-origin defense (ADR-0005). Loopback bind is
  * necessary but insufficient: a browser page can still fetch() the API and
@@ -24,10 +36,33 @@ function originHostname(originHeader) {
  * alias) and (b) carry no Origin, or an Origin with the same local allowlist.
  * No permissive CORS anywhere — we never emit CORS headers, so cross-origin
  * reads are blocked by the browser even where a request lands.
+ *
+ * Amendment (2026-09-17): when PROXY_HOSTNAME is configured, a request whose
+ * Host is exactly that name is accepted only with the proxy secret header,
+ * and then only with no Origin or that same proxy origin. The proxy and local
+ * allowlists never mix.
  */
 export function hostOriginGuard(config) {
   return (req, res, next) => {
     const hostname = hostnameOf(req.headers.host ?? '');
+    const origin = req.headers.origin;
+
+    if (config.PROXY_HOSTNAME !== null && hostname === config.PROXY_HOSTNAME) {
+      if (!secretMatches(req.headers[PROXY_SECRET_HEADER], config.PROXY_SECRET)) {
+        return res.status(403).json({
+          error: 'forbidden-proxy',
+          message: 'Proxy hostname requests must come through the authenticated proxy (ADR-0005)',
+        });
+      }
+      if (origin !== undefined && originHostname(origin) !== config.PROXY_HOSTNAME) {
+        return res.status(403).json({
+          error: 'forbidden-origin',
+          message: 'Cross-origin requests are not allowed (ADR-0005)',
+        });
+      }
+      return next();
+    }
+
     if (!isAllowedLocalHostname(hostname, config.LOCAL_HOSTNAME)) {
       return res.status(403).json({
         error: 'forbidden-host',
@@ -36,7 +71,6 @@ export function hostOriginGuard(config) {
           '(DNS-rebinding defense, ADR-0005)',
       });
     }
-    const origin = req.headers.origin;
     if (
       origin !== undefined &&
       !isAllowedLocalHostname(originHostname(origin), config.LOCAL_HOSTNAME)

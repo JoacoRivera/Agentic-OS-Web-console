@@ -1,0 +1,30 @@
+# >>> aos-console
+# Agentic OS web console — memory metrics, docs, workflow/skill registries.
+#
+# Reached at aos-console.home.arpa, whose AdGuard rewrite answers 100.93.128.49
+# (the Tailscale IP), the same choice docs.home.arpa and fitness.home.arpa make.
+#
+# Unlike the other apps, the console has no login of its own, so this block is
+# its access control (ADR-0005 amendment, 2026-09-17):
+#   - basic_auth gates every path; the account lives in aos-console-users.caddy.
+#   - header_up injects X-AOS-Proxy-Auth. The console accepts the Host
+#     aos-console.home.arpa only with that secret, so the name is useless to
+#     anything that bypasses this block. The secret lives in
+#     aos-console-proxy.caddy and must match PROXY_SECRET in
+#     /etc/aos-console/console.env.
+# Both imported files are root:caddy 640 and never committed.
+#
+# The run-output stream (SSE) is excluded from gzip so events are not buffered.
+http://aos-console.home.arpa {
+	basic_auth {
+		import /etc/caddy/aos-console-users.caddy
+	}
+
+	@compressible not path /api/operations/runs/*/events
+	encode @compressible gzip
+
+	reverse_proxy 127.0.0.1:8084 {
+		import /etc/caddy/aos-console-proxy.caddy
+	}
+}
+# <<< aos-console

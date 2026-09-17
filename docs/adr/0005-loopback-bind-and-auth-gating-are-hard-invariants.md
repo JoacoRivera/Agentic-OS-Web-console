@@ -59,6 +59,34 @@ non-loopback binding remain forbidden. This provides a memorable local URL
 without expanding the listener to the LAN or weakening the default-deny request
 guard.
 
+## Amendment — authenticated reverse-proxy hostname (2026-09-17)
+
+The console may be served on the owner's tailnet at one exact DNS name through a
+reverse proxy on the same host (`aos-console.home.arpa`, via Caddy). The listener
+**stays loopback**; this amendment does not permit a non-loopback `HOST`, and
+`AUTH_CONFIGURED` stays `false`.
+
+- `PROXY_HOSTNAME` (one exact multi-label DNS name, no wildcards, no suffix match, not
+  `.localhost`) and `PROXY_SECRET` (≥ 32 characters) are configured **together** or not at
+  all; either alone is invalid configuration and the server refuses to start.
+- The proxy owns user authentication (HTTP basic auth over every path) and injects the
+  secret as `X-AOS-Proxy-Auth`, overwriting any client-supplied value.
+- The API accepts `Host: <PROXY_HOSTNAME>` **only** with a matching secret (constant-time
+  compare); without it the request is `403 forbidden-proxy`. So a DNS-rebinding page, or
+  anything reaching the loopback port directly, cannot use the name.
+- Proxied requests accept no `Origin` or exactly the proxy origin. The proxy and local
+  allowlists never mix: the proxy origin is rejected on loopback-`Host` requests and vice
+  versa. Still no CORS headers.
+- `EXPOSE_RAW_CONTENT` keeps its default `false`; the proxy does not change raw gating.
+- The owner chose to allow Executable Operations through the proxy: authenticated
+  tailnet users may start the same allowlisted checks, behind the same dry-run + confirm.
+- Verification asserts: proxy mode still binds loopback; proxy `Host` without the secret
+  → 403; with it → 200; proxied cross-origin `Origin` → 403; raw content still hidden;
+  half-configured proxy refuses to start.
+
+Plain HTTP is accepted because `.home.arpa` cannot get a public certificate and tailnet
+traffic between devices is WireGuard-encrypted. Deployment lives in `deploy/`.
+
 ## Principle
 
 Path safety prevents reading outside the allowed roots; it does not make the allowed roots

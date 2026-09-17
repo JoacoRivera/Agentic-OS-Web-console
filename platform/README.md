@@ -44,7 +44,7 @@ stream still require browser-level validation. The baseline EXEC-13 run on 2026-
 
 `dev` / `start` / `verify` / `check:metrics-groundtruth` load `platform/.env` when it
 exists (`--env-file-if-exists`, Node ≥ 22.9). This repo lives **outside** the memory repo,
-so copy `.env.example` to `.env` once (it sets `REPO_ROOT=~/agents/agentic-os`) and plain
+so copy `.env.example` to `.env` once (it sets `REPO_ROOT=~/projects/agentic-os`) and plain
 `npm start` works from this folder. `.env` is gitignored.
 
 | Var                  | Default                          | Notes                                                        |
@@ -52,8 +52,10 @@ so copy `.env.example` to `.env` once (it sets `REPO_ROOT=~/agents/agentic-os`) 
 | `PORT`               | `3001`                           |                                                              |
 | `HOST`               | `127.0.0.1`                      | Non-loopback without auth **fails startup** (ADR-0005)       |
 | `LOCAL_HOSTNAME`     | unset                            | Optional local browser alias; prefer a `.localhost` name for automatic loopback resolution |
-| `REPO_ROOT`          | `../../..` from `server/src/`    | Path to the Agentic OS memory repo. Set in `.env` when developing outside it (e.g. `REPO_ROOT=~/agents/agentic-os`) |
+| `REPO_ROOT`          | `../../..` from `server/src/`    | Path to the Agentic OS memory repo. Set in `.env` when developing outside it (e.g. `REPO_ROOT=~/projects/agentic-os`) |
 | `EXPOSE_RAW_CONTENT` | `false`                          | Gates raw **content** over HTTP only; raw metrics always computed (ADR-0005) |
+| `PROXY_HOSTNAME`     | unset                            | Exact DNS name served by an authenticating reverse proxy (e.g. `aos-console.home.arpa`). Requires `PROXY_SECRET` |
+| `PROXY_SECRET`       | unset                            | ≥ 32 chars; the proxy must send it as `X-AOS-Proxy-Auth`. Set with `PROXY_HOSTNAME` or not at all |
 
 ## Metrics (`GET /api/metrics`)
 
@@ -189,6 +191,10 @@ local/manual — they need the memory repo.
 - The API validates the `Host` header against loopback hosts plus, when configured,
   one explicit local `LOCAL_HOSTNAME`, and rejects every other `Origin`
   (DNS-rebinding defense). No permissive CORS.
+- Optional tailnet serving (ADR-0005 amendment, 2026-09-17): with `PROXY_HOSTNAME` +
+  `PROXY_SECRET`, requests for that exact `Host` are accepted only when they carry the
+  secret header the proxy injects, and only with no `Origin` or that same origin. The bind
+  stays loopback; the proxy (Caddy basic auth) authenticates users. See `../deploy/README.md`.
 - `POST /api/operations/:id/run` and `/dry-run` accept only the executable allowlist,
   behind dry-run + explicit confirm (see Controlled execution above). No generic shell
   endpoint exists.

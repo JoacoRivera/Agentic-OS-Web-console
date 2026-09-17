@@ -95,3 +95,69 @@ test('unknown /api routes return JSON 404 behind the guard', async () => {
   const blocked = await request(app).get('/api/nope').set('Host', 'evil.example');
   assert.equal(blocked.status, 403);
 });
+
+const PROXY_SECRET = 's'.repeat(40);
+const appWithProxy = createApp(
+  createConfig({
+    REPO_ROOT: '/tmp/fixture-root',
+    PROXY_HOSTNAME: 'aos-console.home.arpa',
+    PROXY_SECRET,
+  })
+);
+
+test('the proxy hostname is accepted only with the proxy secret header', async () => {
+  const missing = await request(appWithProxy).get('/api/status').set('Host', 'aos-console.home.arpa');
+  assert.equal(missing.status, 403);
+  assert.equal(missing.body.error, 'forbidden-proxy');
+
+  const wrong = await request(appWithProxy)
+    .get('/api/status')
+    .set('Host', 'aos-console.home.arpa')
+    .set('X-AOS-Proxy-Auth', 'x'.repeat(40));
+  assert.equal(wrong.status, 403);
+  assert.equal(wrong.body.error, 'forbidden-proxy');
+
+  const ok = await request(appWithProxy)
+    .get('/api/status')
+    .set('Host', 'aos-console.home.arpa')
+    .set('X-AOS-Proxy-Auth', PROXY_SECRET);
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.proxyHostname, 'aos-console.home.arpa');
+});
+
+test('proxied requests accept only the proxy origin', async () => {
+  const same = await request(appWithProxy)
+    .post('/api/operations/nope/dry-run')
+    .set('Host', 'aos-console.home.arpa')
+    .set('X-AOS-Proxy-Auth', PROXY_SECRET)
+    .set('Origin', 'http://aos-console.home.arpa');
+  assert.equal(same.status, 405);
+
+  for (const origin of ['http://localhost:5173', 'https://evil.example', 'null']) {
+    const res = await request(appWithProxy)
+      .get('/api/status')
+      .set('Host', 'aos-console.home.arpa')
+      .set('X-AOS-Proxy-Auth', PROXY_SECRET)
+      .set('Origin', origin);
+    assert.equal(res.status, 403, `Origin: ${origin}`);
+    assert.equal(res.body.error, 'forbidden-origin');
+  }
+});
+
+test('the proxy origin is not trusted on loopback-Host requests', async () => {
+  const res = await request(appWithProxy)
+    .get('/api/status')
+    .set('Host', '127.0.0.1:3001')
+    .set('Origin', 'http://aos-console.home.arpa');
+  assert.equal(res.status, 403);
+  assert.equal(res.body.error, 'forbidden-origin');
+});
+
+test('without proxy config, the proxy hostname is an ordinary forbidden host', async () => {
+  const res = await request(app)
+    .get('/api/status')
+    .set('Host', 'aos-console.home.arpa')
+    .set('X-AOS-Proxy-Auth', PROXY_SECRET);
+  assert.equal(res.status, 403);
+  assert.equal(res.body.error, 'forbidden-host');
+});
