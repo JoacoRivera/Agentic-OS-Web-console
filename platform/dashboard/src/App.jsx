@@ -14,6 +14,7 @@ import MemoryQueryView from './views/MemoryQueryView.jsx';
 import ActivityView from './views/ActivityView.jsx';
 import SettingsView from './views/SettingsView.jsx';
 import FamilyHealthView from './views/FamilyHealthView.jsx';
+import FinanceView from './views/FinanceView.jsx';
 import { SECTIONS } from './sections.js';
 
 const DEFAULT_REFRESH_MS = 30000;
@@ -117,6 +118,8 @@ export default function App() {
         }}
       />
     );
+  } else if (sectionId === 'finance') {
+    view = <FinanceView refreshKey={manualRefreshKey} />;
   } else if (sectionId === 'operations') {
     view = (
       <OperationsView

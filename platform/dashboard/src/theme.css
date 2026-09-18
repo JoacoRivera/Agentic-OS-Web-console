@@ -1623,3 +1623,33 @@ svg.growth {
 .badge.fh-kind-marker { color: var(--accent-2); border: 1px solid var(--accent); }
 .badge.fh-kind-pending-result { color: var(--blue); border: 1px solid color-mix(in srgb, var(--blue) 50%, transparent); }
 .badge.fh-kind-original-missing { color: var(--purple); border: 1px solid color-mix(in srgb, var(--purple) 50%, transparent); }
+
+/* ---- Finance (ADR-0011) ---------------------------------------------------
+   Two bands: the month first, the long horizon below. A "waiting" row is the
+   visual form of "absent with its reason" — deliberately not a zero. */
+.fin { display: flex; flex-direction: column; gap: 14px; }
+.fin-band-title { margin-top: 4px; color: var(--accent); letter-spacing: 0.08em; }
+.fin-link { margin-left: 8px; font-size: 11px; }
+.fin-rows { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.fin-row { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.fin-row-name { flex: 0 0 26%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fin-row-val { margin-left: auto; font-variant-numeric: tabular-nums; }
+.fin-bar-track { position: relative; flex: 1; height: 6px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.fin-bar-fill { display: block; height: 100%; background: var(--accent-2); }
+.fin-bar-fill.over { background: var(--yellow); }
+.fin-bar-mark { position: absolute; top: -2px; width: 1px; height: 10px; background: var(--muted); }
+.fin-pace { flex: 0 0 52px; text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+.fin-pace.over { color: var(--yellow); }
+.fin-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex: 0 0 auto; }
+.fin-dot.paid { background: var(--green); }
+.fin-dot.due { background: var(--blue); }
+.fin-dot.overdue { background: var(--accent); }
+.fin-waiting { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 12px; }
+.fin-waiting-mark { color: var(--muted); font-size: 16px; line-height: 1; }
+.fin-stale { display: flex; align-items: center; gap: 8px; padding: 8px 12px; font-size: 12px;
+  color: var(--yellow); border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.fin-history { margin-top: 8px; font-size: 12px; }
+.fin-other-cur .fin-row { gap: 16px; }
+.fin-nosum { margin-top: 8px; font-size: 11px; font-style: italic; }
+.fin-notice { margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--line);
+  font-size: 11px; color: var(--muted); }

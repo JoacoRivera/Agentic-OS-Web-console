@@ -11,6 +11,7 @@ import {
   Settings,
   BrainCircuit,
   Users,
+  Wallet,
 } from 'lucide-react';
 
 /**
@@ -29,6 +30,9 @@ export const SECTIONS = [
   // ADR-0010: a second repo root (the private Health-Management clone), not
   // memory. "Family Health" ≠ "Memory Health" (lint cadence) — keep both names.
   { id: 'family-health', label: 'Family Health', icon: Users, phase: 1 },
+  // ADR-0011: a live external source (Firefly III), not a repo root. Read-only
+  // and loopback-gated like Family Health; the detail stays in Firefly.
+  { id: 'finance', label: 'Finance', icon: Wallet, phase: 1 },
   { id: 'operations', label: 'Operations', icon: TerminalSquare, phase: 2 },
   { id: 'audit-log', label: 'Audit Log', icon: ScrollText, phase: 3 },
   { id: 'settings', label: 'Settings', icon: Settings, phase: 1 },

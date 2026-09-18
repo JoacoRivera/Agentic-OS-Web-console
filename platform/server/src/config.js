@@ -91,11 +91,80 @@ function healthRootFromEnv(env, repoRoot) {
 }
 
 /**
+ * ADR-0011: Firefly III is an optional external source. URL and token are set
+ * together or not at all. The token must never cross a network in cleartext,
+ * so a plain-http URL is accepted only for a loopback host; anything else
+ * must be https. On this host the right value is http://127.0.0.1:8081 — the
+ * public name (finances.home.arpa) would route out to Caddy and back.
+ */
+function fireflyFromEnv(env) {
+  const hasUrl = env.FIREFLY_URL !== undefined && env.FIREFLY_URL !== '';
+  const hasToken = env.FIREFLY_TOKEN !== undefined && env.FIREFLY_TOKEN !== '';
+  // Validated even when the section is off, so a typo in the link base is
+  // reported at startup instead of silently producing no links later.
+  const publicUrl = publicUrlFromEnv(env);
+  if (!hasUrl && !hasToken) return { url: null, token: null, publicUrl };
+  if (!hasUrl || !hasToken) {
+    throw new Error('Invalid Firefly configuration (ADR-0011): FIREFLY_URL and FIREFLY_TOKEN must be set together.');
+  }
+  let parsed;
+  try {
+    parsed = new URL(env.FIREFLY_URL);
+  } catch {
+    throw new Error('Invalid FIREFLY_URL: not a URL (for example, http://127.0.0.1:8081).');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Invalid FIREFLY_URL: use http:// or https://.');
+  }
+  if (parsed.protocol === 'http:' && !isLoopbackHostname(parsed.hostname)) {
+    throw new Error(
+      'Invalid FIREFLY_URL (ADR-0011): plain http is allowed only for a loopback host, so the ' +
+        'access token never crosses a network in cleartext. Use https:// for a remote Firefly.'
+    );
+  }
+  // Normalize to an origin + optional base path, without a trailing slash.
+  const base = `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}`;
+  return { url: base, token: env.FIREFLY_TOKEN, publicUrl };
+}
+
+/**
+ * The browser-facing Firefly address used only to build "open in Firefly"
+ * links — deliberately distinct from FIREFLY_URL. The server reaches Firefly
+ * over loopback, which a browser on another device cannot use, so the link
+ * target is separate config. It is safe to expose (it is the name the owner
+ * already types) and carries no credential; unset simply means no links.
+ */
+function publicUrlFromEnv(env) {
+  if (env.FIREFLY_PUBLIC_URL === undefined || env.FIREFLY_PUBLIC_URL === '') return null;
+  let parsed;
+  try {
+    parsed = new URL(env.FIREFLY_PUBLIC_URL);
+  } catch {
+    throw new Error('Invalid FIREFLY_PUBLIC_URL: not a URL (for example, http://finances.home.arpa).');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Invalid FIREFLY_PUBLIC_URL: use http:// or https://.');
+  }
+  if (parsed.username !== '' || parsed.password !== '') {
+    throw new Error('Invalid FIREFLY_PUBLIC_URL: it is sent to the browser and must carry no credentials.');
+  }
+  return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '')}`;
+}
+
+/**
  * Build the runtime config from an env object. All tunables live here
  * (single source); nothing else reads process.env.
  */
 export function createConfig(env = process.env) {
   const proxy = proxyFromEnv(env);
+  const firefly = fireflyFromEnv(env);
+  const financeAllowProxy = env.FINANCE_ALLOW_PROXY === 'true';
+  if (financeAllowProxy && (firefly.url === null || proxy.hostname === null)) {
+    throw new Error(
+      'Invalid FINANCE_ALLOW_PROXY (ADR-0011): it requires both the FIREFLY_URL/FIREFLY_TOKEN pair ' +
+        'and a configured PROXY_HOSTNAME/PROXY_SECRET pair; on its own it is dead configuration.'
+    );
+  }
   const repoRoot = env.REPO_ROOT ? expandHome(env.REPO_ROOT, env) : path.resolve(__dirname, '../../..');
   const healthRoot = healthRootFromEnv(env, repoRoot);
   const familyHealthAllowProxy = env.FAMILY_HEALTH_ALLOW_PROXY === 'true';
@@ -124,6 +193,20 @@ export function createConfig(env = process.env) {
     // owner sets FAMILY_HEALTH_ALLOW_PROXY together with the proxy pair.
     HEALTH_REPO_ROOT: healthRoot,
     FAMILY_HEALTH_ALLOW_PROXY: familyHealthAllowProxy,
+    // ADR-0011: optional Firefly III source. null = section absent. The token
+    // stays server-side and is never reported by /api/status. Loopback-only
+    // unless the owner sets FINANCE_ALLOW_PROXY with the proxy pair.
+    FIREFLY_URL: firefly.url,
+    FIREFLY_TOKEN: firefly.token,
+    // Link target for the browser only — never used to make an API call.
+    FIREFLY_PUBLIC_URL: firefly.publicUrl,
+    FINANCE_ALLOW_PROXY: financeAllowProxy,
+    // Upstream call budget and how long a good response stays reusable.
+    FIREFLY_TIMEOUT_MS: Number(env.FIREFLY_TIMEOUT_MS ?? 8000),
+    FINANCE_CACHE_MS: Number(env.FINANCE_CACHE_MS ?? 60000),
+    // Distinct months of transaction history a trend indicator needs before
+    // it reports a value instead of what it is waiting for (ADR-0011).
+    FINANCE_MIN_TREND_MONTHS: Number(env.FINANCE_MIN_TREND_MONTHS ?? 3),
     // Audit sink (gitignored): P3 execution appends here; P1 only tails it.
     AUDIT_LOG_PATH: env.AUDIT_LOG_PATH
       ? path.resolve(env.AUDIT_LOG_PATH)

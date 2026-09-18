@@ -430,6 +430,48 @@ record(
   `exit ${fhInsideExit}`
 );
 
+// --- Finance invalid configurations refuse to start (ADR-0011) ---
+// These inherit process.env (which may carry a real .env), so the half of the
+// pair under test is cleared explicitly — otherwise the check would pass, or
+// fail, for a reason other than the one it names.
+const finHalfPair = startServer({
+  PORT: String(port),
+  HOST: '127.0.0.1',
+  FIREFLY_URL: 'http://127.0.0.1:8081',
+  FIREFLY_TOKEN: '',
+});
+const finHalfExit = await finHalfPair.waitExit();
+record(
+  'FIREFLY_URL without FIREFLY_TOKEN refuses to start (non-zero exit)',
+  finHalfExit !== 0 && finHalfExit !== null && finHalfPair.stderr.includes('ADR-0011'),
+  `exit ${finHalfExit}`
+);
+const finCleartext = startServer({
+  PORT: String(port),
+  HOST: '127.0.0.1',
+  FIREFLY_URL: 'http://finances.home.arpa',
+  FIREFLY_TOKEN: 'x'.repeat(40),
+});
+const finCleartextExit = await finCleartext.waitExit();
+record(
+  'plain-http non-loopback FIREFLY_URL refuses to start — the token must not cross a network (ADR-0011)',
+  finCleartextExit !== 0 && finCleartextExit !== null && finCleartext.stderr.includes('ADR-0011'),
+  `exit ${finCleartextExit}`
+);
+const finDeadFlag = startServer({
+  PORT: String(port),
+  HOST: '127.0.0.1',
+  FIREFLY_URL: '',
+  FIREFLY_TOKEN: '',
+  FINANCE_ALLOW_PROXY: 'true',
+});
+const finDeadExit = await finDeadFlag.waitExit();
+record(
+  'FINANCE_ALLOW_PROXY without a Firefly pair refuses to start (non-zero exit)',
+  finDeadExit !== 0 && finDeadExit !== null && finDeadFlag.stderr.includes('ADR-0011'),
+  `exit ${finDeadExit}`
+);
+
 // --- build ---
 const build = await run('npm', ['run', 'build']);
 record('npm run build succeeds', build.code === 0, build.code === 0 ? '' : build.out.slice(-400));

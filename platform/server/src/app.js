@@ -13,6 +13,17 @@ import {
   trendSeries as familyTrendSeries,
   readHealthFile,
 } from './familyHealth.js';
+import {
+  FinanceNotConfiguredError,
+  FinanceProxyRefusedError,
+  createFinanceCache,
+  readSummary as readFinanceSummary,
+  readBills as readFinanceBills,
+  readBudgets as readFinanceBudgets,
+  readCategories as readFinanceCategories,
+  readTrends as readFinanceTrends,
+  readFinanceStatus,
+} from './finance.js';
 import { computeMetrics } from './metrics.js';
 import { buildDocsTree, readDocFile, searchDocs, findBacklinks } from './docs.js';
 import { queryMemory } from './memory.js';
@@ -29,7 +40,7 @@ const DIST_DIR = path.resolve(__dirname, '../../dashboard/dist');
  * Build the Express app. Exported separately from listen() — the primary
  * test seam: tests drive /api/* in-process (supertest-style) with no bind.
  */
-export function createApp(config, { executor = createExecutor(config) } = {}) {
+export function createApp(config, { executor = createExecutor(config), financeCache = createFinanceCache(), financeDeps = {} } = {}) {
   const app = express();
   app.disable('x-powered-by');
 
@@ -49,6 +60,9 @@ export function createApp(config, { executor = createExecutor(config) } = {}) {
       exposeRawContent: config.EXPOSE_RAW_CONTENT,
       familyHealthConfigured: config.HEALTH_REPO_ROOT !== null,
       familyHealthAllowProxy: config.FAMILY_HEALTH_ALLOW_PROXY,
+      // ADR-0011: booleans only. Never the Firefly URL, never the token.
+      financeConfigured: config.FIREFLY_URL !== null,
+      financeAllowProxy: config.FINANCE_ALLOW_PROXY,
       refreshMs: config.REFRESH_MS,
       now: new Date().toISOString(),
     });
@@ -309,6 +323,46 @@ export function createApp(config, { executor = createExecutor(config) } = {}) {
   }));
   app.get('/api/family-health/trends', familyHealthRoute((req) => familyTrendSeries(config, req.query.member, req.query.marker)));
   app.get('/api/family-health/file', familyHealthRoute((req) => readHealthFile(config, req.query.path)));
+
+  // Finance (ADR-0011): a read-only view over a live Firefly III. Unset
+  // config → 404 on every route; loopback-only by default even behind the
+  // authenticated proxy. Error bodies carry codes; never the URL or token.
+  app.use('/api/finance', (req, res, next) => {
+    if (config.FIREFLY_URL === null) {
+      const err = new FinanceNotConfiguredError();
+      return res.status(err.status).json({ error: err.code, message: err.message });
+    }
+    if (isProxiedRequest(req, config) && !config.FINANCE_ALLOW_PROXY) {
+      const err = new FinanceProxyRefusedError();
+      return res.status(err.status).json({ error: err.code, message: err.message });
+    }
+    next();
+  });
+  // Every finance read goes through the TTL cache, so a slow or briefly
+  // unreachable Firefly degrades to the last good value carrying its age
+  // rather than to a blank panel.
+  // `extra` rides on both the success and the upstream-failure body, so a
+  // route can attach browser-facing config (the Firefly link base) that stays
+  // useful even when Firefly itself is not answering.
+  const financeRoute = (key, read, extra = {}) => async (req, res) => {
+    try {
+      const payload = await financeCache.wrap(key, config.FINANCE_CACHE_MS, () => read(config, financeDeps));
+      res.json({ ...payload, ...extra });
+    } catch (err) {
+      if (err.name === 'FireflyError') {
+        res.status(err.status).json({ error: err.code, message: err.message, ...extra });
+      } else {
+        res.status(500).json({ error: 'finance-failed', message: 'finance read failed' });
+      }
+    }
+  };
+  // The public link base is browser-facing config, never the internal URL.
+  app.get('/api/finance/status', financeRoute('status', readFinanceStatus, { publicUrl: config.FIREFLY_PUBLIC_URL }));
+  app.get('/api/finance/summary', financeRoute('summary', readFinanceSummary));
+  app.get('/api/finance/bills', financeRoute('bills', readFinanceBills));
+  app.get('/api/finance/budgets', financeRoute('budgets', readFinanceBudgets));
+  app.get('/api/finance/categories', financeRoute('categories', readFinanceCategories));
+  app.get('/api/finance/trends', financeRoute('trends', readFinanceTrends));
 
   app.use('/api', (req, res) => {
     res.status(404).json({ error: 'not-found' });

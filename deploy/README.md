@@ -9,7 +9,7 @@ Serves the console on the tailnet at http://aos-console.home.arpa, next to Firef
 | Piece                        | Where                                        | Notes                                               |
 |------------------------------|----------------------------------------------|-----------------------------------------------------|
 | `aos-console.service`        | `/etc/systemd/system/`                       | `node server/src/index.js` as `joaquin`, bound `127.0.0.1:8084` |
-| `console.env`                | `/etc/aos-console/` (640 root:joaquin)       | `HOST`, `PORT`, `REPO_ROOT`, `PROXY_HOSTNAME`, `PROXY_SECRET` |
+| `console.env`                | `/etc/aos-console/` (640 root:joaquin)       | `HOST`, `PORT`, `REPO_ROOT`, `PROXY_HOSTNAME`, `PROXY_SECRET`, plus the Family Health and Finance keys |
 | `Caddyfile.snippet`          | appended to `/etc/caddy/Caddyfile`           | Between `# >>> aos-console` / `# <<< aos-console` markers |
 | `aos-console-users.caddy`    | `/etc/caddy/` (640 root:caddy)               | Basic-auth account (bcrypt)                         |
 | `aos-console-proxy.caddy`    | `/etc/caddy/` (640 root:caddy)               | `header_up X-AOS-Proxy-Auth "<PROXY_SECRET>"`       |
@@ -37,6 +37,14 @@ contents, so ADR-0005 forbids serving it beyond localhost without auth. The amen
    host, and leaves the section off otherwise. The basic-auth password and the tailnet's
    device list are the boundary for identifiable medical data — re-check both before
    adding a device or sharing the password.
+6. Finance (ADR-0011) **is** served here by owner decision (amendment of 2026-09-18, on
+   the same tailnet-only grounds). `setup-vps.sh` writes `FIREFLY_URL=http://127.0.0.1:8081`,
+   `FIREFLY_TOKEN`, `FIREFLY_PUBLIC_URL=http://finances.home.arpa` and
+   `FINANCE_ALLOW_PROXY=true` whenever a token is available, carrying the token over from
+   the previous deployment so a re-run never loses it. The two URLs differ on purpose: the
+   server reaches Firefly over **loopback** so the token never crosses a network, while the
+   public name is only ever a link target for the browser. `console.env` now holds finance
+   access as well as the proxy secret.
 
 ## Install / update
 

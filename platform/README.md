@@ -59,6 +59,13 @@ so copy `.env.example` to `.env` once (it sets `REPO_ROOT=~/projects/agentic-os`
 | `PROXY_SECRET`       | unset                            | ≥ 32 chars; the proxy must send it as `X-AOS-Proxy-Auth`. Set with `PROXY_HOSTNAME` or not at all |
 | `HEALTH_REPO_ROOT`   | unset                            | Family Health record: the local `Health-Management` clone (ADR-0010). Unset = section absent. Must not be inside `REPO_ROOT` (or contain it) — startup refuses |
 | `FAMILY_HEALTH_ALLOW_PROXY` | `false`                   | `true` serves Family Health through the authenticated proxy. Requires `HEALTH_REPO_ROOT` and the `PROXY_*` pair, otherwise startup refuses |
+| `FIREFLY_URL`        | unset                            | Firefly III API base (ADR-0011). Set with `FIREFLY_TOKEN` or not at all. Plain `http://` is allowed **only** for a loopback host — on this machine `http://127.0.0.1:8081`, not `finances.home.arpa` — so the token never crosses a network. `https://` for a remote instance |
+| `FIREFLY_TOKEN`      | unset                            | Personal Access Token (Firefly: Options → Profile → OAuth). Server-side only: never in the bundle, `/api/status`, logs, or error bodies |
+| `FIREFLY_PUBLIC_URL` | unset                            | Browser-facing address used **only** to build "open in Firefly" links (e.g. `http://finances.home.arpa`). Never used for an API call; rejected if it embeds credentials. Unset = no links |
+| `FINANCE_ALLOW_PROXY`| `false`                          | `true` serves Finance through the authenticated proxy. Requires the `FIREFLY_*` pair and the `PROXY_*` pair, otherwise startup refuses |
+| `FIREFLY_TIMEOUT_MS` | `8000`                           | Per-request budget for an upstream Firefly call |
+| `FINANCE_CACHE_MS`   | `60000`                          | TTL of the in-process finance cache. Nothing financial is written to disk |
+| `FINANCE_MIN_TREND_MONTHS` | `3`                        | Months of transaction history a trend indicator needs before it reports a value instead of what it is waiting for |
 
 ## Metrics (`GET /api/metrics`)
 
@@ -167,6 +174,37 @@ data never enters metrics, docs search, memory query, the Operations catalog, or
 log. The console renders rows verbatim and computes only counts, dates and series — every
 clinical pane carries "Data to raise with a physician, never a diagnosis." Fixtures under
 `server/test/fixtures/family-health/` are synthetic.
+
+## Finance (`GET /api/finance/*`, ADR-0011)
+
+The console's **first outbound network dependency** and first stored credential: a
+read-only glance over a live Firefly III. Unset `FIREFLY_URL`/`FIREFLY_TOKEN` → `404
+finance-not-configured` on every route and the section says so. Through `PROXY_HOSTNAME`
+every route is `403 finance-proxy-refused` unless `FINANCE_ALLOW_PROXY=true`.
+
+Routes: `status` (version + link base), `summary` (balance, earned, spent, left to spend,
+net worth, savings rate — per currency), `bills`, `budgets` (pacing), `categories`,
+`trends`. Only `GET` ever reaches Firefly, always with `Accept: application/json` and
+`redirect: 'manual'` — without that header Firefly answers `302` to its login page, and
+following it would hand HTML to a JSON parser.
+
+Two rules decide most of the behaviour:
+
+- **A figure that cannot be computed is absent with its reason, never a zero.** With no
+  budgets configured the pacing card reports "Budgets with limits configured in Firefly
+  III"; with too little history the trend cards report how many months they still need. A
+  zero and "no data yet" mean opposite things on a finance dashboard.
+- **Amounts in different currencies are never summed.** `summary/basic` answers
+  currency-suffixed keys (`net-worth-in-PEN`, `bills-unpaid-in-USD`) and the key set is
+  *not* a cartesian product — a metric can exist for one currency and be missing for
+  another. Firefly implies no exchange rate (`pc_*` mirror fields are not a dependable
+  conversion), so neither does the console.
+
+A slow or briefly unreachable Firefly degrades to the last good value carrying its age
+(`stale`, `ageMs`, `staleReason`), never to a blank panel. Nothing financial is written to
+disk, nothing reaches metrics/docs/memory-query/Operations/the audit log, and nothing here
+is executable — the Phase-3 allowlist stays closed. Tests use a fake Firefly on loopback
+with invented figures and never touch the live instance.
 
 ## Legacy HUD retirement (completed 2026-07-30)
 

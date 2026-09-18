@@ -23,6 +23,10 @@ ENV_FILE="/etc/aos-console/console.env"
 # section on the tailnet because only their own devices are on it. Written
 # only when the private clone is present on this host.
 HEALTH_REPO_ROOT="/home/joaquin/projects/Health-Management"
+# ADR-0011: loopback, never finances.home.arpa (that name routes out to Caddy
+# and back). FIREFLY_PUBLIC_URL is browser-facing link config only.
+FIREFLY_URL="http://127.0.0.1:8081"
+FIREFLY_PUBLIC_URL="http://finances.home.arpa"
 USERS_FILE="/etc/caddy/aos-console-users.caddy"
 PROXY_FILE="/etc/caddy/aos-console-proxy.caddy"
 CADDYFILE="/etc/caddy/Caddyfile"
@@ -55,6 +59,25 @@ else
 	echo "    family health: clone not found at $HEALTH_REPO_ROOT — section left off"
 fi
 
+# Finance (ADR-0011). This file is rewritten wholesale, so the token is carried
+# over from the previous deployment, falling back to the developer's
+# platform/.env the first time. FIREFLY_URL stays loopback: the token must
+# never cross a network, and Caddy already fronts finances.home.arpa here.
+FINANCE_LINES=""
+FIREFLY_TOKEN=""
+if sudo test -f "$ENV_FILE"; then
+	FIREFLY_TOKEN="$(sudo sed -n 's/^FIREFLY_TOKEN=//p' "$ENV_FILE")"
+fi
+if [[ -z "$FIREFLY_TOKEN" && -f "$HERE/../platform/.env" ]]; then
+	FIREFLY_TOKEN="$(sed -n 's/^FIREFLY_TOKEN=//p' "$HERE/../platform/.env")"
+fi
+if [[ -n "$FIREFLY_TOKEN" ]]; then
+	FINANCE_LINES=$'FIREFLY_URL='"$FIREFLY_URL"$'\nFIREFLY_TOKEN='"$FIREFLY_TOKEN"$'\nFIREFLY_PUBLIC_URL='"$FIREFLY_PUBLIC_URL"$'\nFINANCE_ALLOW_PROXY=true'
+	echo "    finance: serving $FIREFLY_URL through the proxy (ADR-0011 amendment)"
+else
+	echo "    finance: no Firefly token found — section left off"
+fi
+
 sudo install -d -m 755 -o root -g root /etc/aos-console
 sudo install -m 640 -o root -g joaquin /dev/stdin "$ENV_FILE" <<ENV
 HOST=127.0.0.1
@@ -63,6 +86,7 @@ REPO_ROOT=$REPO_ROOT
 PROXY_HOSTNAME=$NAME
 PROXY_SECRET=$SECRET
 $FAMILY_HEALTH_LINES
+$FINANCE_LINES
 ENV
 
 # --------------------------------------------------------------- Service ----
