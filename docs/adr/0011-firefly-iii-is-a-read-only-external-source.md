@@ -20,7 +20,16 @@ to that port. The console service runs beside it on `127.0.0.1:8084`.
 The console wants a Finance section that answers *"am I on track this month?"* at a
 glance, with long-term health below it, and **leaves all detail in Firefly** — every card
 links back rather than reimplementing the ledger. The owner decided on 2026-09-17 that
-the console is the *viewer* and the Home Management System does not own this surface.
+the console is the *viewer*.
+
+**Correction (2026-09-18):** this ADR originally recorded that decision as also settling
+that the Home Management System does not own the finance surface. It did not. That reading
+rested on a naming mix-up — the owner's remark referred to the `Health-Management` clone
+(the Markdown clinical record of ADR-0010), not to the `home-management-system` TypeScript
+monorepo, whose memory page still legitimately describes a Finance phase among its seven.
+So the console being the viewer stands, but **the boundary between it and that project's
+Finance module was never decided** and remains open. Nothing in this ADR depends on that
+boundary; a future decision about it does not reopen anything decided here.
 
 This introduces two firsts for the project, and they are the reason this ADR exists:
 
@@ -54,7 +63,10 @@ interpret what it shows.
 
 3. **Only `GET`.** The adapter exposes no write verb. Firefly remains the sole source of
    truth for the ledger; the console never mutates it, and "read-only" is enforced by the
-   shape of the code rather than by configuration that could be flipped.
+   shape of the code rather than by configuration that could be flipped. **This decision
+   stands unaided** (see Open questions, closed 2026-09-18): a Firefly Personal Access
+   Token carries no scopes, so there is no read-only credential to fall back on and no
+   second layer behind this one.
 
 4. **`Accept: application/json` always; redirects are never followed.** Verified against
    the live instance on 2026-09-17: without that header Firefly's web middleware answers
@@ -194,14 +206,19 @@ the honest form of decision 9 and incidentally tells the owner what to go set up
   *and* a `foreign_amount` in USD. `pc_*` is not a dependable conversion, so nothing may be
   built on it and **decision 11 stands unaided** — cross-currency totals are simply not
   computed.
-- **Whether Firefly Personal Access Tokens support read-only scopes.** If they do not —
-  the current expectation — then decision 3 is the *only* thing standing between this
-  token and write access to the owner's finances, which raises the bar on code review for
-  the adapter.
-- **`FINANCE_ALLOW_PROXY` for the VPS.** Family Health is served over the tailnet by
-  owner decision (ADR-0010 amendment, 2026-09-17) on the grounds that only the owner's
-  devices are on it. The same grounds would apply here, but the decision is separate and
-  belongs in an amendment below, not in a default.
+- **~~Whether Firefly Personal Access Tokens support read-only scopes.~~** Closed
+  2026-09-18: **they do not.** The owner, who created the token, confirmed that the
+  creation screen offered no scope or read-only option — the token is full access to their
+  Firefly data and cannot be narrowed. (Owner recollection for this Firefly version, not an
+  API capability the console verified.) The consequence is the one this question
+  anticipated: **decision 3 now stands unaided.** "Only `GET`" is the sole thing between
+  this credential and write access to the household ledger, so it is a property of the
+  code's shape rather than of configuration, and any change to `finance.js` that
+  introduces a non-`GET` call — or a helper that could issue one — is a
+  `block`-level review finding, not a style note.
+- **~~`FINANCE_ALLOW_PROXY` for the VPS.~~** Closed 2026-09-18 by the amendment below:
+  the owner chose to serve Finance on the tailnet, on the same grounds already accepted
+  for Family Health.
 
 ## Amendment — served on the owner's tailnet (2026-09-18)
 

@@ -110,7 +110,9 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
    `FIREFLY_URL` + `FIREFLY_TOKEN` are set together or not at all (unset = section
    absent); plain `http://` is allowed **only** for a loopback host so the token never
    crosses a network in cleartext — on this host the value is `http://127.0.0.1:8081`,
-   **not** `finances.home.arpa`. Only `GET` ever reaches Firefly; the token never leaves
+   **not** `finances.home.arpa`. Only `GET` ever reaches Firefly — a Firefly PAT carries
+   **no scopes**, so this is the *only* barrier to write access and a non-`GET` call is a
+   `block`-level review finding; the token never leaves
    the server (not in the bundle, `/api/status`, logs, or error bodies); `/api/finance/*`
    is refused through `PROXY_HOSTNAME` unless `FINANCE_ALLOW_PROXY=true`. No financial
    data in metrics, docs, memory query, the Operations catalog, or the audit log, and
