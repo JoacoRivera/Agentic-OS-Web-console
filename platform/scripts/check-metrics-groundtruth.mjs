@@ -1,10 +1,11 @@
 // check:metrics-groundtruth — PERMANENT correctness check (ADR-0002).
 // Boots the real server, fetches /api/metrics over HTTP, and compares it
 // field-by-field against an INDEPENDENT filesystem recount implemented here
-// from the documented rules (skip basenames index|log|_template|README;
-// `all` = wiki+raw+templates minus _template only; captures under
-// raw `examples/` approved via a plain `Status:` body line; health from the
-// first `lint` entry in wiki/log.md; knowledge intake deduplicated by explicit
+// from the documented rules (skip basenames index|log|_template|README and the
+// wiki/log/ archive; `all` = wiki+raw+templates minus _template only; captures
+// classified Draft / on hold / Ingested as the memory repo's capture inventory
+// does; health from the newest `lint | maintenance pass` entry across the log
+// and its archive; knowledge intake deduplicated by explicit
 // `source_id` / `knowledge_intake_date` / `promoted_from` lineage). It
 // deliberately does NOT import `server/src/metrics.js`; the active filesystem
 // roots are the source of truth.
@@ -58,30 +59,215 @@ function listMd(rel) {
 const base = (p) => path.basename(p, '.md');
 const inExamples = (p) => path.dirname(p).split('/').some((seg) => seg.includes('examples'));
 
-// A capture is approved when its first `status:` marker line resolves to
-// "approved" — inline (`Status: Approved`) or as the next bullet/line
-// (`Status:` / `- Approved`). Line-scanner implementation, independent of
-// the server's regex.
-async function captureApproved(relPath) {
-  let text;
+// ---------- capture lifecycle + log recount (memory repo ADR-0002) ----------
+// Rules from the memory repo's scripts/aos_wiki/inventory.py and
+// scripts/wiki_log.py, re-implemented here by character/line scanning rather
+// than the server's regexes: Draft | Ingested (legacy `Approved` = Ingested),
+// ingestion evidence (a wiki `source:` entry or an `ingest` log entry naming
+// the path), holds from scripts/capture-holds.txt, and the maintenance pass —
+// only `lint | maintenance pass` resets the 7-day timer — across wiki/log.md
+// and the wiki/log/YYYY-MM.md archive.
+
+const readNormalized = (rel) => {
   try {
-    text = await fs.readFile(path.join(repoRoot, relPath), 'utf8');
+    return fssync.readFileSync(path.join(repoRoot, rel), 'utf8').replace(/\r\n?/g, '\n');
   } catch {
-    return false; // unreadable → draft
+    return null;
   }
-  const lines = text.split(/\r?\n/);
-  for (let i = 0; i < lines.length; i++) {
-    const m = lines[i].match(/^[ \t]*status[ \t]*:(.*)$/i);
-    if (!m) continue;
-    let value = m[1].trim();
-    for (let j = i + 1; value === '' && j < lines.length; j++) {
-      value = lines[j].trim();
+};
+const pyLines = (text) => text.split(/[\n\v\f\x1c\x1d\x1e\x85\u2028\u2029]/);
+
+/** `wiki/log/<name>` sits directly in the archive folder. */
+const isArchiveLog = (p) => p.startsWith('wiki/log/') && p.split('/').length === 3;
+
+function isTemplate(rel) {
+  const parts = rel.split('/');
+  const name = parts.at(-1);
+  if (name === '_template.md' || name.endsWith('-template.md')) return true;
+  return parts.slice(0, -1).some((d) => ['template', 'templates'].includes(d.toLowerCase()));
+}
+
+function statusOf(text) {
+  const values = pyLines(text).filter((l) => l.startsWith('Status:')).map((l) => l.slice(7).trim());
+  if (values.length !== 1) return 'none';
+  return ['Draft', 'Ingested', 'Approved'].includes(values[0]) ? values[0] : 'none';
+}
+
+function isRealDay(text) {
+  const d = new Date(`${text}T00:00:00Z`);
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === text;
+}
+
+function logEntriesRecount() {
+  const files = fssync.existsSync(path.join(repoRoot, 'wiki/log.md')) ? ['wiki/log.md'] : [];
+  const archiveDir = path.join(repoRoot, 'wiki/log');
+  if (fssync.existsSync(archiveDir)) {
+    const names = fssync.readdirSync(archiveDir, { withFileTypes: true })
+      .filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
+    const good = names.filter((n) => /^\d{4}-\d{2}\.md$/.test(n)).sort().reverse();
+    const bad = names.filter((n) => !/^\d{4}-\d{2}\.md$/.test(n)).sort().reverse();
+    files.push(...[...good, ...bad].map((n) => `wiki/log/${n}`));
+  }
+  const entries = [];
+  for (const file of files) {
+    const text = readNormalized(file);
+    if (text === null) continue;
+    let open = null;
+    for (const line of pyLines(text)) {
+      if (!line.startsWith('## ')) {
+        if (open) open.lines.push(line);
+        continue;
+      }
+      open = null;
+      // `## [YYYY-MM-DD] <op> | <subject>`, parsed positionally.
+      const date = line.slice(4, 14);
+      if (line[3] !== '[' || line[14] !== ']' || line[15] !== ' ' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      const rest = line.slice(16);
+      const sep = rest.indexOf(' | ');
+      if (sep <= 0) continue;
+      const op = rest.slice(0, sep);
+      const subject = rest.slice(sep + 3);
+      if (/\s/.test(op) || subject.length === 0) continue;
+      open = { index: entries.length, date, op, subject, lines: [line] };
+      entries.push(open);
     }
-    value = value.replace(/^[-*][ \t]*/, '');
-    const word = (value.match(/^([a-zA-Z]+)/) || [])[1] || '';
-    return word.toLowerCase() === 'approved';
   }
-  return false;
+  return entries;
+}
+
+function isPass(entry) {
+  if (entry.op !== 'lint' || !entry.subject.startsWith('maintenance pass')) return false;
+  const next = entry.subject.charAt('maintenance pass'.length);
+  return next === '' || /\s/.test(next) || ':;,(—–-'.includes(next);
+}
+
+// Raw paths named in a line, by scanning from each `raw/` occurrence with
+// explicit left/right boundary allowlists (not the server's lookaround regex).
+const PATH_CHAR = /[\p{L}\p{N}_./-]/u;
+const LEFT_OK = (line, i) =>
+  i === 0 || /\s/.test(line[i - 1]) || '([`"\','.includes(line[i - 1])
+  || (i >= 2 && line.slice(i - 2, i) === './');
+const RIGHT_OK = (line, j) =>
+  j === line.length || /\s/.test(line[j]) || ')]`"\',;:'.includes(line[j])
+  || (line[j] === '.' && (j + 1 === line.length || /\s/.test(line[j + 1])));
+function rawPathsIn(line) {
+  const found = [];
+  let from = 0;
+  for (;;) {
+    const i = line.indexOf('raw/', from);
+    if (i === -1) return found;
+    let matched = -1;
+    if (LEFT_OK(line, i)) {
+      for (let j = i + 4; j < line.length && PATH_CHAR.test(line[j]); j++) {
+        if (j > i + 4 && line.startsWith('.md', j) && RIGHT_OK(line, j + 3)) {
+          matched = j + 3;
+          break;
+        }
+      }
+    }
+    if (matched !== -1) {
+      found.push(line.slice(i, matched));
+      from = matched;
+    } else {
+      from = i + 1;
+    }
+  }
+}
+
+function sourcesDeclared(wikiFiles) {
+  const declared = new Set();
+  const yaml = matter.engines.yaml.parse;
+  for (const rel of wikiFiles) {
+    const text = readNormalized(rel);
+    if (text === null || !text.startsWith('---\n')) continue;
+    const lines = text.slice(4).split('\n');
+    const close = lines.findIndex((l) => l.startsWith('---'));
+    if (close === -1) continue;
+    const block = lines.slice(0, close).join('\n');
+    if (lines.slice(0, close).filter((l) => /^source[ \t]*:/.test(l)).length > 1) continue;
+    let data;
+    try {
+      data = yaml(block, { json: true });
+    } catch {
+      continue;
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) continue;
+    const v = data.source;
+    const list = typeof v === 'string' ? [v] : Array.isArray(v) ? v : [];
+    if (list.some((x) => typeof x !== 'string')) continue;
+    for (const x of list) if (x.startsWith('raw/')) declared.add(x);
+  }
+  return declared;
+}
+
+function holdsRecount() {
+  const holds = new Set();
+  let warnings = 0;
+  const text = readNormalized('scripts/capture-holds.txt');
+  if (text === null) return { holds, warnings };
+  for (const raw of pyLines(text)) {
+    const line = raw.trim();
+    if (line === '' || line[0] === '#') continue;
+    const entry = line.split('#')[0].trim();
+    if (entry.includes(' ') || !entry.startsWith('raw/') || !entry.endsWith('.md')) warnings++;
+    else holds.add(entry);
+  }
+  return { holds, warnings };
+}
+
+function capturesRecount(rawAll, wikiAll) {
+  const entries = logEntriesRecount();
+  const oldestIngest = new Map();
+  for (const e of [...entries].reverse()) {
+    if (e.op !== 'ingest') continue;
+    for (const line of e.lines) for (const p of rawPathsIn(line)) if (!oldestIngest.has(p)) oldestIngest.set(p, e.index);
+  }
+  const declared = sourcesDeclared(wikiAll);
+  const { holds, warnings } = holdsRecount();
+  let draftN = 0;
+  let heldN = 0;
+  let legacyApprovedN = 0;
+  let mismatchN = 0;
+  let layoutWarningN = 0;
+  let holdWarningN = warnings;
+  const ingested = [];
+  const inScope = new Set();
+  for (const rel of rawAll) {
+    if (isTemplate(rel)) continue;
+    const text = readNormalized(rel) ?? '';
+    const inside = rel.split('/').includes('examples');
+    if (!inside && !pyLines(text).some((l) => l.startsWith('Status:'))) continue;
+    inScope.add(rel);
+    const status = statusOf(text);
+    const marked = status === 'Ingested' || status === 'Approved';
+    const evidence = declared.has(rel) || oldestIngest.has(rel);
+    if (!inside && !marked) {
+      layoutWarningN++;
+      continue;
+    }
+    if (marked || evidence) {
+      ingested.push(rel);
+      if (status === 'Approved') legacyApprovedN++;
+      if (marked !== evidence) mismatchN++;
+      if (holds.has(rel)) holdWarningN++;
+    } else if (holds.has(rel)) heldN++;
+    else draftN++;
+  }
+  for (const h of holds) if (!inScope.has(h)) holdWarningN++;
+
+  const pass = entries.find((e) => isPass(e) && isRealDay(e.date)) ?? null;
+  const since = pass
+    ? ingested.filter((p) => (oldestIngest.get(p) ?? Infinity) < pass.index).length
+    : null;
+  return {
+    capN: draftN + heldN + ingested.length,
+    draftN,
+    heldN,
+    ingestedN: ingested.length,
+    captures: { legacyApprovedN, mismatchN, layoutWarningN, holdWarningN },
+    lastPass: pass?.date ?? null,
+    ingestedSincePass: since,
+  };
 }
 
 // ---------- lineage recount (bottom-up, deliberately unlike the producer) ----------
@@ -367,32 +553,18 @@ async function recountLineage(paths) {
 async function recount() {
   const wikiAll = listMd('wiki');
   const rawAll = listMd('raw');
-  const wiki = wikiAll.filter((p) => !SKIP.has(base(p)));
+  const wiki = wikiAll.filter((p) => !SKIP.has(base(p)) && !isArchiveLog(p));
   const raw = rawAll.filter((p) => !SKIP.has(base(p)));
   const allFiles = [...wikiAll, ...rawAll, ...listMd('templates')].filter(
     (p) => base(p) !== '_template'
   );
 
-  const captures = raw.filter(inExamples);
   const lineage = await recountLineage([...wiki, ...raw]);
-  let apprN = 0;
-  for (const c of captures) if (await captureApproved(c)) apprN++;
-
-  let lastLint = null;
-  try {
-    for (const line of (await fs.readFile(path.join(repoRoot, 'wiki/log.md'), 'utf8')).split('\n')) {
-      const m = line.match(/^##\s*\[(\d{4}-\d{2}-\d{2})\]\s+lint\s*\|/);
-      if (m) {
-        lastLint = m[1];
-        break;
-      }
-    }
-  } catch {
-    /* no log → never linted */
-  }
+  const caps = capturesRecount(rawAll, wikiAll);
+  const { lastPass } = caps;
   const dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const lintAge = lastLint
-    ? Math.floor((dayStart(new Date()) - dayStart(new Date(`${lastLint}T00:00:00`))) / 86400e3)
+  const passAge = lastPass
+    ? Math.round((dayStart(new Date()) - dayStart(new Date(`${lastPass}T00:00:00`))) / 86400e3)
     : null;
 
   return {
@@ -404,13 +576,11 @@ async function recount() {
     workflows: wikiAll.filter((p) => p.startsWith('wiki/workflows/') && !inExamples(p)).length,
     rawProj: raw.filter((p) => p.startsWith('raw/projects/')).length,
     rawFlow: raw.filter((p) => p.startsWith('raw/workflows/')).length,
-    capN: captures.length,
-    apprN,
-    draftN: captures.length - apprN,
+    ...caps,
     ...lineage,
-    lastLint,
-    lintAge,
-    healthStale: lintAge === null || lintAge >= 7,
+    passAge,
+    healthStale: passAge === null || passAge >= 7,
+    overdue: passAge === null || passAge >= 10,
   };
 }
 
@@ -484,13 +654,16 @@ try {
 
   for (const f of [
     'wikiN', 'rawN', 'all', 'examples', 'projects', 'workflows',
-    'rawProj', 'rawFlow', 'capN', 'apprN', 'draftN', 'knowledgeN', 'last30',
+    'rawProj', 'rawFlow', 'capN', 'draftN', 'heldN', 'ingestedN', 'knowledgeN', 'last30',
   ]) {
     check(f, console_[f], truth[f]);
   }
-  check('health.lastLint', console_.health.lastLint, truth.lastLint);
-  check('health.lintAge', console_.health.lintAge, truth.lintAge);
-  check('health.healthStale', console_.health.healthStale, truth.healthStale);
+  check('captures (legacy Approved / mismatch / layout / hold warnings)', console_.captures, truth.captures);
+  check('health.lastPass (maintenance pass)', console_.health.lastPass, truth.lastPass);
+  check('health.passAge', console_.health.passAge, truth.passAge);
+  check('health.healthStale (pass due)', console_.health.healthStale, truth.healthStale);
+  check('health.overdue', console_.health.overdue, truth.overdue);
+  check('health.ingestedSincePass', console_.health.ingestedSincePass, truth.ingestedSincePass);
 
   // The whole 30-point curve, not just its endpoint: a wrong intake *date*
   // moves points without moving the total.

@@ -220,7 +220,8 @@ export function createConfig(env = process.env) {
     EXPOSE_RAW_CONTENT: env.EXPOSE_RAW_CONTENT === 'true',
     // No auth layer exists in Phase 1; this stays false until one is designed.
     AUTH_CONFIGURED: false,
-    LINT_STALE_DAYS: 7,
+    // The maintenance-pass cadence (due at 7 days, overdue at 10) is a memory-repo
+    // contract mirrored in captures.js, not console configuration.
     WORKFLOW_STALE_DAYS: 90,
     RECENT_ACTIVITY_LIMIT: 6,
     DRAFT_LIMIT: 6,

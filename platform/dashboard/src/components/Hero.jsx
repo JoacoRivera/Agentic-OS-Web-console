@@ -36,9 +36,9 @@ export default function Hero({ status, metrics }) {
             <span className="chip">{metrics.capN} captures</span>
             <span className={`chip ${metrics.draftN > 0 ? 'warn' : 'ok'}`}>
               <span className="status-dot" />
-              {metrics.draftN > 0 ? `${metrics.draftN} to review` : 'all reviewed'}
+              {metrics.draftN > 0 ? `${metrics.draftN} to ingest` : 'all ingested'}
             </span>
-            <span className="chip">{metrics.apprN} approved</span>
+            <span className="chip">{metrics.ingestedN} ingested</span>
             <span className="chip">{metrics.trend}</span>
           </>
         )}

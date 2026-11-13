@@ -10,7 +10,7 @@ import { safeResolve } from './paths.js';
  *
  * Raw *content* is gated by EXPOSE_RAW_CONTENT (default false, ADR-0005);
  * the tree still lists raw/ paths (names are metrics-grade metadata — the
- * review queue already surfaces them), but /api/docs/file withholds raw
+ * ingest queue already surfaces them), but /api/docs/file withholds raw
  * bodies unless the flag is on. Path safety (safeResolve) is a separate
  * concern and does not make a root safe to expose.
  */

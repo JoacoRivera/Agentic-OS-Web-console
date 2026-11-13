@@ -130,7 +130,7 @@ try {
   record(
     '/api/metrics responds 200 with the documented shape',
     met.status === 200 &&
-      ['wikiN', 'rawN', 'all', 'capN', 'draftN', 'apprN', 'weekTotal', 'trend'].every((f) => f in metBody) &&
+      ['wikiN', 'rawN', 'all', 'capN', 'draftN', 'heldN', 'ingestedN', 'weekTotal', 'trend'].every((f) => f in metBody) &&
       metBody.series?.length === 30 &&
       metBody.week?.length === 7 &&
       'healthStale' in (metBody.health ?? {})

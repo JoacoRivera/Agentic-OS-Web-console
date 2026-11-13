@@ -1,6 +1,6 @@
 # Knowledge growth uses explicit intake lineage
 
-Status: accepted; amended 2026-07-27
+Status: accepted; amended 2026-07-27 and 2026-11-13
 
 The console's growth chart is keyed on explicit semantic lineage. It counts distinct
 knowledge-intake sources by `knowledge_intake_date`, deduplicated by `source_id`.
@@ -102,8 +102,44 @@ published memory), **not** a left-to-right pipeline. The scalar stats must refle
 - **`all`** — total files across tiers. If shown, label it "Total files across tiers" and make
   clear it **double-counts a promoted item** (it remains as both raw source *and* wiki
   synthesis). Never present `all` as "total memory/knowledge".
-- **`draftN`** — unapproved captured examples (the review queue, drained by a `status` edit
-  *inside the raw file*), **not** "unprocessed raw backlog". Promotion ≠ approval.
+- **`draftN`** — Draft captures not yet ingested (the ingest queue, drained when `/aos-ingest`
+  flips `Status: Draft` to `Status: Ingested` *inside the raw file*), **not** "unprocessed raw
+  backlog". See the capture-lifecycle amendment below; the original "unapproved / review
+  queue" wording is superseded.
 - **`knowledgeN`** — distinct valid lineage sources, deduplicated by `source_id`.
   This is the knowledge-intake total and excludes unlineaged/invalid files.
 - **No funnel/burndown visual** between `raw/` and `wiki/`; raw never decreases.
+
+## Capture-lifecycle amendment (2026-11-13)
+
+The memory repo's own ADR-0002 (2026-11-07, "the memory flow runs without human
+checkpoints") retired triage, the risk classes and the delegated approval flip. A capture
+has two states, **Draft** and **Ingested**; `Status: Approved` is the legacy spelling of
+Ingested (the ~256 captures from before the change keep it). A Draft named in the memory
+repo's `scripts/capture-holds.txt` is **on hold**. The console's earlier rule — a capture
+counts as done only when its first `status:` line reads `Approved` — therefore misread every
+new `Status: Ingested` capture as pending (21 phantom drafts on 2026-11-13 against 0 in the
+memory repo's own inventory).
+
+The console now classifies captures exactly as the memory repo's capture inventory
+(`scripts/aos_wiki/inventory.py`) does, so the two cannot disagree about the same tree:
+
+- **Scope:** every `raw/**/*.md` with an `examples` path segment, plus any other raw file
+  carrying an unqualified `Status:` line; templates (`_template.md`, `*-template.md`, a
+  `template(s)/` directory) are out of scope.
+- **State:** exactly one canonical `Status: Draft | Ingested | Approved` line, else `none`
+  (the Draft side). A capture is Ingested when its marker says so **or** when there is
+  ingestion evidence — a wiki page's frontmatter `source:` naming it, or an `ingest` log
+  entry (in `wiki/log.md` or the `wiki/log/YYYY-MM.md` archive) naming it. Disagreements are
+  counted as Ingested and surfaced as `captures.mismatchN`, never silently absorbed.
+- **Fields:** `capN = draftN + heldN + ingestedN`; `drafts[]` / `held[]` (capped at
+  `DRAFT_LIMIT`); `captures.{legacyApprovedN, mismatchN, layoutWarningN, holdWarningN}`
+  (counts only). `apprN` is removed.
+
+The memory-health cadence follows the same repo's maintenance-pass rule
+(`scripts/wiki_log.py`): only a `lint | maintenance pass` entry resets the timer, read across
+the log and its archive; due at 7+ days, overdue at 10+ (`health.{lastPass, passAge,
+healthStale, overdue, ingestedSincePass}`; `lastLint`/`lintAge` are removed). The archive
+files are the log, not pages: they no longer count in `wikiN` or lineage coverage, as the
+memory repo's lint exempts them from every page check. `check:metrics-groundtruth` recounts
+all of this independently.

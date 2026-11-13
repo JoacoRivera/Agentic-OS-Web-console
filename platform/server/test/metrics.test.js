@@ -5,7 +5,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import request from 'supertest';
-import { computeMetrics, isApprovedText } from '../src/metrics.js';
+import { computeMetrics } from '../src/metrics.js';
+import { readStatus } from '../src/captures.js';
 import { createApp } from '../src/app.js';
 import { createConfig } from '../src/config.js';
 
@@ -22,6 +23,8 @@ let bare;
 let strict;
 let graph;
 let problemCap;
+let life;
+let lifeMetrics;
 let metrics;
 let graphMetrics;
 
@@ -73,12 +76,16 @@ before(async () => {
       '# Activity Log',
       '',
       `## [${isoDay(daysAgo(1))}] ingest | something else`,
-      `## [${isoDay(daysAgo(3))}] lint | most recent pass`, // first lint match wins
-      `## [${isoDay(daysAgo(20))}] lint | an older pass`,
+      '- filed `raw/projects/client/examples/cap-front.md` into a page.',
+      `## [${isoDay(daysAgo(2))}] lint | fix a broken link`, // a lint entry, not a pass
+      `## [${isoDay(daysAgo(3))}] lint | maintenance pass — clean`, // newest pass wins
+      `## [${isoDay(daysAgo(20))}] lint | maintenance pass`,
       '',
     ].join('\n')
   );
   await write(root, 'wiki/_template.md'); // excluded everywhere, even from all
+  // The monthly log archive is the log, not a page: counted in `all` only.
+  await write(root, 'wiki/log/2026-01.md', '# Activity Log — 2026-01\n\n## [2026-01-05] ingest | old\n');
   await write(root, 'wiki/page-a.md', origin('page-a', daysAgo(40), '# Page A\n'));
   await write(root, 'templates/tmpl.md');
   await write(root, 'templates/_template.md'); // excluded from all
@@ -113,7 +120,7 @@ before(async () => {
   await write(
     root,
     'raw/projects/client/examples/cap-list.md',
-    origin('cap-list', daysAgo(10), '# capture\nStatus:\n- Approved\n')
+    origin('cap-list', daysAgo(10), '# capture\nStatus: Ingested\n')
   );
   await write(
     root,
@@ -122,7 +129,7 @@ before(async () => {
       '---',
       `source_id: ${uuidFor('cap-front')}`,
       `knowledge_intake_date: ${isoDay(daysAgo(10))}`,
-      'status: approved',
+      'status: approved', // frontmatter is not the marker; the ingest log entry is the evidence
       '---',
       '# capture',
       '',
@@ -148,7 +155,7 @@ before(async () => {
 
   // ---- mtimes: everything quiet 20 days ago, three edits this week ----
   for (const rel of [
-    'wiki/index.md', 'wiki/log.md', 'wiki/_template.md', 'templates/tmpl.md',
+    'wiki/index.md', 'wiki/log.md', 'wiki/log/2026-01.md', 'wiki/_template.md', 'templates/tmpl.md',
     'templates/_template.md', 'dashboards/dash.md', 'raw/README.md',
     'raw/promoted-item.md', 'raw/projects/proj-raw.md', 'raw/workflows/flow-raw.md',
     'raw/projects/client/examples/cap-draft.md',
@@ -312,9 +319,9 @@ test('scalar counts follow the canonical skip/count rules', () => {
 });
 
 test('`all` counts active memory tiers and ignores the retired dashboards root', () => {
-  // 9 wiki + 10 raw + 2 templates = 21, minus the two _template.
-  // The residual dashboards fixture must not contribute.
-  assert.equal(metrics.all, 19);
+  // 10 wiki (incl. the log archive month) + 10 raw + 2 templates = 22, minus
+  // the two _template. The residual dashboards fixture must not contribute.
+  assert.equal(metrics.all, 20);
 });
 
 test('`all` double-counts a promoted item (raw source AND wiki synthesis, ADR-0003)', async () => {
@@ -347,10 +354,22 @@ test('knowledge intake deduplicates promotions by explicit lineage', () => {
   });
 });
 
-test('captures: approval via the canonical status rule (inline, list item, frontmatter)', () => {
+test('captures: Draft / Ingested by the Status: line or ingestion evidence (ADR-0002)', () => {
   assert.equal(metrics.capN, 5);
-  assert.equal(metrics.apprN, 3);
+  // cap-inline (legacy Approved), cap-list (Ingested), cap-front (no marker,
+  // but an ingest log entry names it → Ingested). All three are mismatches:
+  // the first two are marked Ingested with no wiki/log evidence, cap-front is
+  // evidenced without the marker — counted as Ingested, never silently.
+  assert.equal(metrics.ingestedN, 3);
   assert.equal(metrics.draftN, 2);
+  assert.equal(metrics.heldN, 0);
+  assert.deepEqual(metrics.captures, {
+    legacyApprovedN: 1,
+    mismatchN: 3,
+    layoutWarningN: 0,
+    holdWarningN: 0,
+  });
+  assert.equal('apprN' in metrics, false);
   assert.deepEqual(
     metrics.drafts.map((d) => d.name),
     ['cap-draft2', 'cap-draft'] // newest mtime first
@@ -368,16 +387,17 @@ test('drafts[] is capped by DRAFT_LIMIT; draftN still counts the whole queue', a
   );
 });
 
-test('isApprovedText applies the first status marker exactly', () => {
-  assert.equal(isApprovedText('Status: Approved'), true);
-  assert.equal(isApprovedText('  status :  approved'), true);
-  assert.equal(isApprovedText('Status:\n- Approved'), true);
-  assert.equal(isApprovedText('Status:\n  * approved'), true);
-  assert.equal(isApprovedText('---\nstatus: approved\n---\nbody'), true);
-  assert.equal(isApprovedText('Status: Draft'), false);
-  assert.equal(isApprovedText('Status: Draft\nStatus: Approved'), false); // first match wins
-  assert.equal(isApprovedText('no marker at all'), false);
-  assert.equal(isApprovedText(''), false);
+test('readStatus: exactly one canonical inline marker, else none', () => {
+  assert.equal(readStatus('# c\nStatus: Draft\n'), 'Draft');
+  assert.equal(readStatus('Status: Ingested'), 'Ingested');
+  assert.equal(readStatus('Status:   Approved  \r\n'), 'Approved'); // legacy spelling, CRLF
+  assert.equal(readStatus('Status:\n- Approved'), 'none'); // list form is not canonical
+  assert.equal(readStatus('  Status: Draft'), 'none'); // must start the line
+  assert.equal(readStatus('status: ingested'), 'none'); // case-sensitive
+  assert.equal(readStatus('Status: Draft\nStatus: Ingested'), 'none'); // several markers
+  assert.equal(readStatus('Status: Reviewed'), 'none');
+  assert.equal(readStatus('Plan status: Draft'), 'none'); // qualified marker
+  assert.equal(readStatus(''), 'none');
 });
 
 test('30-day growth series is cumulative by distinct knowledge intake date', () => {
@@ -413,12 +433,16 @@ test('recent activity is top-N across all tiers by mtime', () => {
   );
 });
 
-test('health comes from the FIRST lint entry in wiki/log.md', () => {
-  assert.equal(metrics.health.lastLint, isoDay(daysAgo(3)));
-  assert.equal(metrics.health.lintAge, 3);
-  assert.equal(metrics.health.healthStale, false); // 3 < LINT_STALE_DAYS=7
+test('health is the newest `lint | maintenance pass` entry; other lint entries do not reset it', () => {
+  assert.equal(metrics.health.lastPass, isoDay(daysAgo(3))); // not the day-2 fix-up
+  assert.equal(metrics.health.passAge, 3);
+  assert.equal(metrics.health.healthStale, false); // 3 < 7
+  assert.equal(metrics.health.overdue, false);
   assert.equal(metrics.health.ageLabel, '3 DAYS AGO');
   assert.equal(metrics.health.staleDays, 7);
+  assert.equal(metrics.health.overdueDays, 10);
+  // cap-front's first ingest entry sits above the pass
+  assert.equal(metrics.health.ingestedSincePass, 1);
 });
 
 test('no synthetic gauge ceiling: target() helper and targets field are removed', async () => {
@@ -467,8 +491,10 @@ test('lineage metrics do not depend on Git and expose incomplete or conflicting 
     Object.keys(problem).join(',') === 'path,reason'
   )));
   assert.doesNotMatch(JSON.stringify(m.lineage.problems), /RAW BODY MUST NOT LEAK/);
-  assert.equal(m.health.lastLint, null); // no wiki/log.md
+  assert.equal(m.health.lastPass, null); // no wiki/log.md
   assert.equal(m.health.healthStale, true);
+  assert.equal(m.health.overdue, true);
+  assert.equal(m.health.ingestedSincePass, null);
   assert.equal(m.health.ageLabel, 'NEVER');
 });
 
@@ -696,7 +722,7 @@ test('GET /api/metrics returns the documented fields', async () => {
   const m = res.body;
   for (const field of [
     'wikiN', 'rawN', 'all', 'examples', 'projects', 'workflows', 'rawProj', 'rawFlow',
-    'capN', 'draftN', 'apprN', 'drafts', 'knowledgeN', 'lineage',
+    'capN', 'draftN', 'heldN', 'ingestedN', 'captures', 'drafts', 'held', 'knowledgeN', 'lineage',
     'series', 'last30', 'week', 'weekTotal',
     'activeDays', 'recent', 'health', 'trend', 'generatedAt',
   ]) {

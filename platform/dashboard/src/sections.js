@@ -24,11 +24,11 @@ export const SECTIONS = [
   { id: 'workflows', label: 'Workflows', icon: Workflow, phase: 1 },
   { id: 'skills', label: 'Skills', icon: Sparkles, phase: 1 },
   { id: 'memory-query', label: 'Memory Query', icon: BrainCircuit, phase: 1 },
-  { id: 'review-queue', label: 'Review Queue', icon: Inbox, phase: 1 },
-  { id: 'memory-health', label: 'Memory Health', icon: HeartPulse, phase: 1 },
+  { id: 'review-queue', label: 'Ingest Queue', icon: Inbox, phase: 1 },
+  { id: 'memory-health', label: 'Maintenance', icon: HeartPulse, phase: 1 },
   { id: 'activity', label: 'Activity', icon: Activity, phase: 1 },
   // ADR-0010: a second repo root (the private Health-Management clone), not
-  // memory. "Family Health" ≠ "Memory Health" (lint cadence) — keep both names.
+  // memory. "Family Health" ≠ "Maintenance" (the memory maintenance-pass cadence) — keep them apart.
   { id: 'family-health', label: 'Family Health', icon: Users, phase: 1 },
   // ADR-0011: a live external source (Firefly III), not a repo root. Read-only
   // and loopback-gated like Family Health; the detail stays in Firefly.

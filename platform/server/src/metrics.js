@@ -1,6 +1,15 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import matter from 'gray-matter';
+import {
+  MAINTENANCE_DUE_DAYS,
+  MAINTENANCE_OVERDUE_DAYS,
+  classifyCaptures,
+  ingestedSincePass,
+  isLogFile,
+  lastMaintenancePass,
+  readLogEntries,
+} from './captures.js';
 
 /**
  * Canonical memory metrics (ADR-0002): a live filesystem scan. Scalar file
@@ -38,19 +47,6 @@ const LINEAGE_REASON = Object.freeze({
   UNREADABLE_FILE: 'unreadable-file',
   UNSAFE_PROMOTED_FROM: 'unsafe-promoted-from',
 });
-
-/**
- * Approval marker for a capture: a plain single-colon `Status:` body line
- * (inline `Status: Approved` or a following list item `Status:\n- Approved`).
- * Applied to the *full* file text, including frontmatter; the first matching
- * `status:` line determines the result.
- */
-const APPROVED_RE = /^[ \t]*status[ \t]*:[ \t]*(?:\r?\n[ \t]*)*(?:[-*][ \t]*)?([a-z]+)/im;
-
-export function isApprovedText(text) {
-  const m = (text || '').match(APPROVED_RE);
-  return !!m && m[1].toLowerCase() === 'approved';
-}
 
 const skip = (page) => SKIP_BASENAMES.has(page.name);
 const isEx = (page) => page.folder.includes('examples');
@@ -371,7 +367,9 @@ export async function computeMetrics(config, now = new Date()) {
 
   // ---- scalar counts (canonical console rules; raw metrics always computed,
   // regardless of EXPOSE_RAW_CONTENT — that flag gates content, ADR-0005) ----
-  const wiki = byRoot.wiki.filter((p) => !skip(p));
+  // The log archive `wiki/log/YYYY-MM.md` is the log, not a page — exempt from
+  // every page rule exactly like log.md (memory repo wiki_log.is_log_file).
+  const wiki = byRoot.wiki.filter((p) => !skip(p) && !isLogFile(p.path));
   const raw = byRoot.raw.filter((p) => !skip(p) && p.name !== '.gitkeep');
   // NB: `all` excludes only `_template` — index/log/README stay counted here.
   const all = SCAN_ROOTS.flatMap((root) => byRoot[root]).filter((p) => p.name !== '_template');
@@ -384,31 +382,40 @@ export async function computeMetrics(config, now = new Date()) {
     (p) => inFolder(p, 'raw/workflows') && !skip(p) && p.name !== '_template'
   ).length;
 
-  // ---- captures: draft vs approved review queue ----
-  // draftN is the review queue (drained by a `status` edit inside the raw
-  // file); promotion ≠ approval, and rawN never drains (ADR-0003).
-  const captures = raw.filter(isEx);
-  const capStatus = await Promise.all(
-    captures.map(async (p) => {
-      let approved = false;
-      try {
-        approved = isApprovedText(await fs.readFile(path.join(repoRoot, p.path), 'utf8'));
-      } catch {
-        /* unreadable → draft */
-      }
-      return { p, approved };
-    })
+  // ---- captures: Draft / on hold / Ingested (memory repo ADR-0002) ----
+  // Same classification as the memory repo's capture inventory: no triage, no
+  // approval — a Draft waits only for /aos-ingest. rawN never drains (ADR-0003).
+  const logEntries = await readLogEntries(repoRoot);
+  const { buckets, firstIngest } = await classifyCaptures(
+    repoRoot,
+    byRoot.raw.map((p) => p.path),
+    byRoot.wiki.map((p) => p.path),
+    logEntries
   );
-  const draftPages = capStatus
-    .filter((s) => !s.approved && s.p.mtimeMs)
-    .map((s) => s.p)
-    .sort((a, b) => b.mtimeMs - a.mtimeMs);
-  const capN = captures.length;
-  const apprN = capStatus.filter((s) => s.approved).length;
-  const draftN = draftPages.length;
-  const drafts = draftPages
-    .slice(0, config.DRAFT_LIMIT)
-    .map((p) => ({ name: p.name, path: p.path, mtime: new Date(p.mtimeMs).toISOString() }));
+  const rawByPath = new Map(byRoot.raw.map((p) => [p.path, p]));
+  const listed = (items, extra = () => ({})) =>
+    items
+      .map((item) => ({ item, page: rawByPath.get(item.path) }))
+      .sort((a, b) => b.page.mtimeMs - a.page.mtimeMs)
+      .slice(0, config.DRAFT_LIMIT)
+      .map(({ item, page }) => ({
+        name: page.name,
+        path: page.path,
+        mtime: new Date(page.mtimeMs).toISOString(),
+        ...extra(item),
+      }));
+  const draftN = buckets.draft.length;
+  const heldN = buckets.onHold.length;
+  const ingestedN = buckets.ingested.length;
+  const capN = draftN + heldN + ingestedN;
+  const captures = {
+    legacyApprovedN: buckets.ingested.filter((i) => i.status === 'Approved').length,
+    mismatchN: buckets.ingested.filter((i) => i.mismatch).length,
+    layoutWarningN: buckets.layoutWarning.length,
+    holdWarningN: buckets.holdWarning.length,
+  };
+  const drafts = listed(buckets.draft);
+  const held = listed(buckets.onHold, (item) => ({ reason: item.hold }));
 
   // ---- 30-day cumulative knowledge intake (ADR-0003 amendment) ----
   // Missing/invalid lineage is excluded rather than guessed from Git or fs
@@ -449,21 +456,18 @@ export async function computeMetrics(config, now = new Date()) {
     .slice(0, config.RECENT_ACTIVITY_LIMIT)
     .map((p) => ({ name: p.name, path: p.path, mtime: new Date(p.mtimeMs).toISOString() }));
 
-  // ---- memory-health cadence: first `lint` entry in wiki/log.md ----
-  let lastLint = null;
-  try {
-    const logText = await fs.readFile(path.join(repoRoot, 'wiki/log.md'), 'utf8');
-    const m = logText.match(/^##\s*\[(\d{4}-\d{2}-\d{2})\]\s+lint\s*\|/m);
-    if (m) lastLint = m[1];
-  } catch {
-    /* log unreadable — treated as "never" (stale) */
-  }
-  const lintAge = lastLint
-    ? Math.floor((dayStartMs(now) - dayStartMs(new Date(`${lastLint}T00:00:00`))) / DAY_MS)
+  // ---- maintenance-pass cadence (memory repo wiki_log.py) ----
+  // Only a `lint | maintenance pass` entry resets the 7-day timer — other
+  // `lint` entries do not — read across wiki/log.md and its monthly archive.
+  const pass = lastMaintenancePass(logEntries);
+  const lastPass = pass?.dateText ?? null;
+  const passAge = lastPass
+    ? Math.round((dayStartMs(now) - dayStartMs(new Date(`${lastPass}T00:00:00`))) / DAY_MS)
     : null;
-  const healthStale = lintAge === null || lintAge >= config.LINT_STALE_DAYS;
+  const healthStale = passAge === null || passAge >= MAINTENANCE_DUE_DAYS;
+  const overdue = passAge === null || passAge >= MAINTENANCE_OVERDUE_DAYS;
   const ageLabel =
-    lintAge === null ? 'NEVER' : lintAge <= 0 ? 'TODAY' : lintAge === 1 ? '1 DAY AGO' : `${lintAge} DAYS AGO`;
+    passAge === null ? 'NEVER' : passAge <= 0 ? 'TODAY' : passAge === 1 ? '1 DAY AGO' : `${passAge} DAYS AGO`;
 
   return {
     wikiN: wiki.length,
@@ -478,8 +482,11 @@ export async function computeMetrics(config, now = new Date()) {
     rawFlow,
     capN,
     draftN,
-    apprN,
+    heldN,
+    ingestedN,
+    captures,
     drafts,
+    held,
     knowledgeN,
     lineage,
     series,
@@ -489,11 +496,14 @@ export async function computeMetrics(config, now = new Date()) {
     activeDays,
     recent,
     health: {
-      lastLint,
-      lintAge,
-      healthStale,
+      lastPass,
+      passAge,
+      healthStale, // the maintenance pass is due
+      overdue,
       ageLabel,
-      staleDays: config.LINT_STALE_DAYS,
+      staleDays: MAINTENANCE_DUE_DAYS,
+      overdueDays: MAINTENANCE_OVERDUE_DAYS,
+      ingestedSincePass: ingestedSincePass(buckets, firstIngest, logEntries, pass),
     },
     trend: weekTotal > 0 ? 'ACTIVE' : 'IDLE',
     generatedAt: now.toISOString(),

@@ -37,7 +37,7 @@ memory repo (see `platform/.env.example`).
 These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if tests pass.
 
 1. **The console never executes LLM Skills** (ADR-0001/ADR-0009). The repo Skills — all
-   `aos-*`-prefixed, 15 observed on 2026-07-30 — need
+   `aos-*`-prefixed, 11 observed on 2026-11-13 — need
    LLM judgment and can only ever be **Guided Operations** (checklist + command preview). Do
    not shell out to headless Claude or pretend a Skill is an npm script. The Phase-3
    executable allowlist contains **only** deterministic checks (`npm run verify`,
@@ -104,7 +104,7 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
    2026-09-17; the tailnet holds only the owner's devices). No binaries served, no writes, no family-health data
    in metrics/search/memory query/audit log, and the console never interprets a value
    ("Data to raise with a physician, never a diagnosis"). Fixtures are synthetic; real
-   family data never enters this repo. Do not confuse it with "Memory Health".
+   family data never enters this repo. Do not confuse it with the Maintenance (memory-pass) section.
 
 7. **Finance is a live external source: read-only, opt-in, loopback-gated** (ADR-0011).
    `FIREFLY_URL` + `FIREFLY_TOKEN` are set together or not at all (unset = section
@@ -124,14 +124,26 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
    Phase-3 allowlist stays closed. `FIREFLY_PUBLIC_URL` is browser-facing link config only
    and is never used for an API call.
 
+8. **Capture state and the maintenance pass mirror the memory repo's own tooling**
+   (ADR-0003 amendment, 2026-11-13). A capture is **Draft** or **Ingested** (legacy
+   `Status: Approved` = Ingested; a Draft in `scripts/capture-holds.txt` is on hold),
+   classified exactly as the memory repo's `scripts/aos_wiki/inventory.py` does — there is
+   no triage, approval or review step to model (memory repo ADR-0002). The cadence is the
+   newest `lint | maintenance pass` entry across `wiki/log.md` and `wiki/log/YYYY-MM.md`
+   (`scripts/wiki_log.py`); other `lint` entries never reset it, and archive files are not
+   pages. When those scripts change, `server/src/captures.js` and the
+   `check:metrics-groundtruth` recount change with them.
+
 ## Domain language (use these exact terms)
 
 Three deliberately distinct, non-interchangeable concepts (`CONTEXT.md`):
 
 - **Skill** — an LLM-facing capability pack from `.claude/skills/*/SKILL.md`. Invoked by
-  Claude; not console-executable. All are **`aos-*`-prefixed** (15 observed on
-  2026-07-30); the registry and checks discover/recount them and never fix the count
+  Claude; not console-executable. All are **`aos-*`-prefixed** (11 observed on
+  2026-11-13); the registry and checks discover/recount them and never fix the count
   (ADR-0009). Never hardcode a phantom Skill (`/bw2-update-memory` does not exist, and the
+  retired `/aos-hook`, `/aos-task-mode`, `/aos-promote-draft-memory`, `/aos-verify-block`,
+  `/aos-test-wiki-lint` are gone; the
   old unprefixed names `/ingest`, `/query-memory`, … are retired).
 - **Workflow** — a documented runbook/procedure from `wiki/workflows/*.md`, followed by a
   human or LLM; not console-executable. Has a `workflow_kind`.
@@ -144,7 +156,7 @@ Avoid the words "command"/"tool"/"task"/"runbook" as synonyms for these — the 
 
 ## Phasing
 
-- **Phase 1** (ship target) — read-only console: metrics, health, review queue, Docs
+- **Phase 1** (ship target) — read-only console: metrics, maintenance-pass health, ingest queue, Docs
   explorer/search/backlinks, Workflow registry+checks, Skill registry, Odysseus visual shell.
 - **Phase 2** — Guided Operations (checklists + command previews, copy, no execution).
 - **Phase 3** — controlled execution: executable allowlist + dry-run + confirm + diff +

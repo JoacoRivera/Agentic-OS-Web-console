@@ -20,6 +20,33 @@ backlog that drains. `raw/` and `wiki/` are two independent monotonic stores, no
 a pipeline; there is no raw→wiki funnel.
 _Avoid_: note, doc, treating rawN as unprocessed backlog, raw→wiki burndown framing
 
+**Capture** (lifecycle):
+A raw file under a `raw/**/examples/` path (or any raw file with an unqualified `Status:`
+line) written by `/aos-capture-approved-example` or the memory repo's Memory Bridge. Since
+the memory repo's ADR-0002 (2026-11-07) it has two states, read from exactly one
+`Status:` line or from ingestion evidence (a wiki `source:` or an `ingest` log entry naming
+it): **Draft** (written, not yet ingested) and **Ingested**. `Status: Approved` is the
+**legacy** spelling of Ingested. A Draft listed in the memory repo's
+`scripts/capture-holds.txt` is **on hold** — parked on purpose, not overdue. The console
+mirrors the memory repo's capture inventory exactly; it never classifies differently.
+_Avoid_: approved/unapproved, triage, review queue, risk class (all retired), treating a
+legacy `Approved` capture as different from an Ingested one
+
+**Ingest queue**:
+The Draft captures not yet ingested and not on hold (`draftN`, `drafts[]`). It drains when
+`/aos-ingest` flips `Status: Draft` to `Status: Ingested`, normally in the same session the
+capture was written. There is no human approval step in front of it.
+_Avoid_: review queue (the retired triage framing), backlog of raw/
+
+**Maintenance pass**:
+The owner's weekly touchpoint with memory (it replaced per-capture triage): `/aos-wiki-lint`,
+a skim of what was ingested since the last pass, and judgment fixes, logged as
+`## [YYYY-MM-DD] lint | maintenance pass`. Only that subject resets the 7-day timer — other
+`lint` entries do not — and it is read across `wiki/log.md` and its monthly archive
+`wiki/log/YYYY-MM.md`. Due at 7+ days or when none exists, overdue at 10+. The archive
+files are the log, never wiki pages.
+_Avoid_: lint cadence, last lint, reconcile pass (a `lint` entry is not a pass)
+
 ### Metrics
 
 **Canonical metrics implementation**:
@@ -122,7 +149,7 @@ These three are deliberately distinct concepts and must not be conflated in any 
 An LLM-facing capability/instruction pack from `.claude/skills/*/SKILL.md`. Invoked by
 Claude, requires LLM judgment. **Not executable by the console** — the console may only
 *describe* a skill or guide a human through invoking it. All repo skills are
-**`aos-*`-prefixed** (15 observed on 2026-07-30); the registry, `verify`, and
+**`aos-*`-prefixed** (11 observed on 2026-11-13, down from 15 on 2026-07-30); the registry, `verify`, and
 `check:skills` discover/recount the directory and never fix the count
 ([ADR-0009](adr/0009-canonical-aos-skill-catalog-is-discovered.md)). The old unprefixed
 invocations (`/ingest`, `/query-memory`, …) are retired.
@@ -170,7 +197,7 @@ _Avoid_: treating editorial niceties as defects
 A console-facing **action card** — a separate UI/runtime concept that *may reference* a
 skill or workflow but is neither. Two strict subtypes:
 - **Guided Operation**: checklist + command-preview only. No mutation, no shell, no Claude
-  invocation. (e.g. session-start, draft-review.)
+  invocation. (e.g. session-start, maintenance-pass.)
 - **Executable Operation**: deterministic, allowlisted local code only. No LLM judgment,
   no arbitrary shell, no headless Claude. (e.g. `npm run check:paths`.)
 _Avoid_: command, action (use "Operation"), task
@@ -184,7 +211,7 @@ named by `HEALTH_REPO_ROOT` (`family-overview.md`, `members/<name>/`, `reference
 loopback-only by default even behind the proxy, and is read-only (ADR-0010). The memory
 repo's synthesized pages under `wiki/projects/family-health-tracker/` are cross-linked, not
 re-parsed; the 2026-07-23 raw snapshot is evidence, not a data source.
-_Avoid_: Memory Health (the lint-cadence section), health (ambiguous), mounting it under `raw/`
+_Avoid_: Memory Health (the old name of the maintenance-pass section), health (ambiguous), mounting it under `raw/`
 
 **Member**:
 One `members/<name>/` folder in the Family Health record, identified by its folder name.
@@ -233,12 +260,12 @@ _Avoid_: conflating with Platform Apps / the memory console
 
 ## Notes
 
-- A console Operation that maps onto an LLM Skill (ingest, promote-draft, capture-example,
-  query-memory) can only ever be a **Guided Operation**. It must never claim to *execute*
+- A console Operation that maps onto an LLM Skill (ingest, capture-example, reconcile,
+  query-memory, …) can only ever be a **Guided Operation**. It must never claim to *execute*
   the skill.
 - Guided Operation cards are representative flows, not one-card-per-Skill coverage. A
   skill-backed preview must resolve through the live Skill Registry and invoke the same
   `aos-*` identity; only the Hero command bar is exhaustive, because it derives directly
   from `/api/skills` (ADR-0009).
-- `/wiki-lint` (LLM skill) is split from a future deterministic `check:wiki-structure`
+- `/aos-wiki-lint` (LLM skill) is split from a future deterministic `check:wiki-structure`
   Executable Operation — same intent, different runtime, different concept.

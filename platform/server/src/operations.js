@@ -30,19 +30,25 @@ export const EXECUTABLE_ALLOWLIST = [
   'check:metrics-groundtruth',
 ];
 
+// Guided cards track the memory repo's live contracts (AGENTS.md, the `aos-*`
+// SKILL.md files and wiki/workflows/manual-operations.md, reviewed 2026-11-13):
+// capture → ingest runs in one session with no triage or approval step
+// (memory repo ADR-0002); the weekly maintenance pass is the owner's
+// touchpoint; `/aos-hook`, `/aos-task-mode` and `/aos-promote-draft-memory`
+// are retired — `/aos-plan` and `/aos-implement` walk the mode and hook points.
 const GUIDED_OPERATIONS = [
   {
     id: 'session-start',
     title: 'Session start',
     description:
-      'Open a working session against the memory repo: load the schema, then recall before doing.',
+      'Open a working session against the memory repo: load the schema, read the status lines, then recall before doing.',
     workflow: 'wiki/workflows/manual-operations.md',
     skill: 'aos-query-memory',
     checklist: [
       'Read AGENTS.md (the schema) at the start of the session.',
+      'Read the status lines (python3 scripts/aos_status.py, or the SessionStart hook): maintenance-pass age, Drafts waiting for ingest, git state, setup.',
       'Recall relevant memory before working: run /aos-query-memory on the topic.',
-      'Check wiki/log.md for the last lint entry — a 7+ day gap means a maintenance pass is due.',
-      'Note any open drafts in the review queue before starting new work.',
+      'Before new implementation work, run /aos-reconcile so pending ingests and open questions are settled first.',
     ],
     commandPreview: '/aos-query-memory <topic>',
     params: [
@@ -50,67 +56,83 @@ const GUIDED_OPERATIONS = [
     ],
   },
   {
-    id: 'task-mode-select',
-    title: 'Classify the task mode',
+    id: 'reconcile',
+    title: 'Reconcile before new work',
     description:
-      'Route a non-trivial task into one of the seven task modes before executing it.',
-    workflow: 'wiki/workflows/task-modes.md',
-    skill: 'aos-task-mode',
+      'Two-phase gate before implementation: one report of pending ingests, git state and open questions, then only the fixes you approve.',
+    workflow: 'wiki/workflows/manual-operations.md',
+    skill: 'aos-reconcile',
     checklist: [
-      'Run /aos-task-mode to classify the task and emit the required-output skeleton.',
-      'Pick the mode: exploration, implementation, production-change, hotfix, research, documentation, or memory-update.',
+      'Phase 1 inventories pending raw/ ingestions, open git commit state and open wiki/workflow/skill questions, then stops.',
+      'Give an explicit disposition for every item — nothing is guessed.',
+      'Phase 2 applies only the approved fixes; each approved ingest makes its own commit through /aos-ingest.',
+      'Never pushes; pushing stays with the owner.',
+    ],
+    commandPreview: '/aos-reconcile',
+  },
+  {
+    id: 'plan-task',
+    title: 'Plan a task',
+    description:
+      'Plan without editing: classify the task mode, load the memory it needs, run the pre-task contract, return a scoped plan.',
+    workflow: 'wiki/workflows/task-modes.md',
+    skill: 'aos-plan',
+    checklist: [
+      'Mode is one of seven: exploration, implementation, production-change, hotfix, research, documentation, memory-update.',
       'Declare it in the first line of the work (`Mode: <name>`).',
+      'The plan names its verification and risks; no file is edited.',
       'Apply the universal anti-fabrication rule to every claim.',
     ],
-    commandPreview: '/aos-task-mode <task>',
+    commandPreview: '/aos-plan <task>',
     params: [
-      {
-        name: 'task',
-        label: 'Task',
-        hint: 'one-line description of the task to classify',
-      },
+      { name: 'task', label: 'Task', hint: 'one-line description of the task' },
     ],
   },
   {
-    id: 'pre-edit-checklist',
-    title: 'Pre-edit checklist',
-    description: 'Guardrail hook run before touching a file (guardrail-hooks: pre-edit).',
+    id: 'implement-task',
+    title: 'Implement a task',
+    description:
+      'Implement end to end with the mode, memory, guardrail hooks and verification split applied (guardrail-hooks: pre-task … post-edit).',
     workflow: 'wiki/workflows/guardrail-hooks.md',
-    skill: 'aos-hook',
+    skill: 'aos-implement',
     checklist: [
-      'Confirm the file is in scope for the declared task mode.',
-      'raw/ is immutable evidence — never edit or delete it (two narrow header carve-outs only).',
-      'Check for a conflicting in-flight change (git status).',
-      'Know the verification you will run after the edit.',
+      'Edits stay in scope for the declared mode; raw/ is immutable evidence (two narrow header carve-outs only).',
+      'Re-read the diff — it matches the stated intent and nothing more.',
+      'Separate verification performed from verification recommended; a false claim is block-level.',
+      'Close out with /aos-pre-commit and, once the result is approved, /aos-capture-approved-example.',
     ],
-    commandPreview: '/aos-hook pre-edit',
+    commandPreview: '/aos-implement <task>',
+    params: [
+      { name: 'task', label: 'Task', hint: 'one-line description of the change' },
+    ],
   },
   {
-    id: 'post-edit-checklist',
-    title: 'Post-edit checklist',
-    description: 'Guardrail hook run after an edit lands (guardrail-hooks: post-edit).',
-    workflow: 'wiki/workflows/guardrail-hooks.md',
-    skill: 'aos-hook',
+    id: 'capture-approved-example',
+    title: 'Capture an approved example',
+    description:
+      'After the user approves a result, file it as one lineaged raw/ Draft — then ingest it in the same session.',
+    workflow: 'wiki/workflows/memory-quality.md',
+    skill: 'aos-capture-approved-example',
     checklist: [
-      'Re-read the diff — does it match the stated intent and nothing more?',
-      'Run the checks the edit affects (lint, tests, link check).',
-      'Update wiki/index.md if pages were added or recategorized.',
-      'Separate verification performed from verification recommended.',
+      'Confirm the user actually approved the result being captured.',
+      'Write one new raw/ file with source_id + knowledge_intake_date and exactly one `Status: Draft` line — no `Approved by:` line.',
+      'Run /aos-ingest on it in the same session; there is no triage or approval step.',
+      'Never store secrets, credentials or tokens in a capture.',
     ],
-    commandPreview: '/aos-hook post-edit',
+    commandPreview: '/aos-capture-approved-example',
   },
   {
     id: 'memory-update',
     title: 'Ingest raw source into the wiki',
     description:
-      'Promote raw/ source material into synthesized wiki/ pages (ingest workflow).',
+      'File raw/ sources into synthesized wiki/ pages, flip the capture to Ingested, and make one local commit.',
     workflow: 'wiki/workflows/manual-operations.md',
     skill: 'aos-ingest',
     checklist: [
-      'Place the source under raw/<topic>/<slug>-YYYY-MM-DD.ext first.',
-      'Run the pre-memory-update guardrail hook (/aos-hook pre-memory-update).',
-      'Synthesize into wiki/ pages — link, never copy-paste; cite the raw source.',
-      'Update wiki/index.md and prepend an ingest entry to wiki/log.md.',
+      'Validate the source lineage (source_id + knowledge_intake_date); stop on missing/invalid — never edit raw or guess.',
+      'Decide keep, merge or skip; synthesize into wiki/ pages, mark contradicted content superseded.',
+      'New pages declare promoted_from + wiki_publish_date; update wiki/index.md and prepend an ingest entry to wiki/log.md.',
+      'Flip `Status: Draft` to `Status: Ingested`, then one local commit of exactly the files the ingest wrote; stop and ask only on a suspected secret.',
     ],
     commandPreview: '/aos-ingest <source>',
     params: [
@@ -122,53 +144,17 @@ const GUIDED_OPERATIONS = [
     ],
   },
   {
-    id: 'capture-approved-example',
-    title: 'Capture an approved example',
+    id: 'maintenance-pass',
+    title: 'Weekly maintenance pass',
     description:
-      'After the user approves a result, file it as a new raw/ draft capture (the capture half of the memory loop).',
-    workflow: 'wiki/workflows/memory-quality.md',
-    skill: 'aos-capture-approved-example',
-    checklist: [
-      'Confirm the user actually approved the result being captured.',
-      'Write one raw/ file only, with a Status: Draft header line.',
-      'Do not ingest in the same step — the draft goes through triage first.',
-    ],
-    commandPreview: '/aos-capture-approved-example',
-  },
-  {
-    id: 'draft-review',
-    title: 'Review draft captures',
-    description:
-      'Triage the draft queue: decide ingest / keep-as-draft / delete / merge for each raw capture.',
-    workflow: 'wiki/workflows/memory-quality.md',
-    skill: 'aos-promote-draft-memory',
-    checklist: [
-      'List raw drafts (the Review Queue section mirrors this).',
-      'For each: is it worth remembering? Classify low-risk vs high-risk.',
-      'On an ingest verdict, follow the delegated approval-flip rules.',
-      'Leave high-risk review blocks for the user to resolve.',
-    ],
-    commandPreview: '/aos-promote-draft-memory <capture>',
-    params: [
-      {
-        name: 'capture',
-        label: 'Draft capture path',
-        hint: 'a raw/ draft from the Review Queue',
-      },
-    ],
-  },
-  {
-    id: 'wiki-lint',
-    title: 'Wiki lint (judgment pass)',
-    description:
-      'Memory hygiene: deterministic checks first, then the LLM judgment checks (contradictions, drift, invented certainty).',
+      'The owner\'s 7-day touchpoint with memory (it replaced per-capture triage): lint, skim what was ingested, make judgment fixes.',
     workflow: 'wiki/workflows/manual-operations.md',
     skill: 'aos-wiki-lint',
     checklist: [
-      'Run the deterministic linter first: python3 scripts/wiki-lint.py.',
-      'Review by judgment: contradictions, orphan pages, missing cross-references, stale claims.',
-      'Fix what you can, flag what you cannot.',
-      'Prepend a lint entry to wiki/log.md — this resets the 7-day health cadence.',
+      'Run /aos-wiki-lint: the deterministic checks, then the judgment checks.',
+      'Skim the captures ingested since the last pass and the pages they changed; run /aos-ingest on any Draft not on hold.',
+      'Make the judgment fixes; a bad ingest is one local commit and can be reverted on its own.',
+      'Prepend `## [YYYY-MM-DD] lint | maintenance pass — <result>` — only that subject resets the 7-day timer.',
     ],
     commandPreview: '/aos-wiki-lint',
   },
@@ -190,14 +176,14 @@ const GUIDED_OPERATIONS = [
   {
     id: 'session-close',
     title: 'Session close',
-    description: 'End-of-session checklist so nothing durable is left unfiled.',
+    description: 'End-of-session checklist (AGENTS.md) so nothing durable is left unfiled.',
     workflow: 'wiki/workflows/manual-operations.md',
     skill: null,
     checklist: [
-      'New sources are filed under raw/.',
+      'New sources are filed under raw/; every capture written this session is ingested unless on hold.',
+      'New Markdown origins/publications carry the correct lineage form.',
       'Affected wiki/ pages and wiki/index.md are updated.',
-      'A log.md entry summarizing the session is prepended.',
-      'No secrets, no invented facts, open questions preserved.',
+      'A log.md entry summarizes the session\'s changes; pushing stays manual.',
     ],
     commandPreview: 'git status --short',
   },
@@ -208,7 +194,7 @@ const EXECUTABLE_OPERATIONS = [
     id: 'verify',
     title: 'Console smoke checks',
     description:
-      'Boot the server and assert the safety + API invariants (bind, Host/Origin defense, raw gating, 501s, build).',
+      'Boot the server and assert the safety + API invariants (bind, Host/Origin defense, raw gating, run refusals, build).',
     commandPreview: 'npm run verify',
   },
   {

@@ -71,15 +71,21 @@ so copy `.env.example` to `.env` once (it sets `REPO_ROOT=~/projects/agentic-os`
 
 The **canonical** memory-metrics implementation (ADR-0002): a live filesystem scan per
 request (no cache — refresh is "fetch again"), using the console metric contract. Skip
-basenames `index|log|_template|README`; counts `wikiN` (published memory — the headline),
+basenames `index|log|_template|README` and the `wiki/log/YYYY-MM.md` log archive; counts
+`wikiN` (published memory — the headline),
 `rawN` (append-only raw capture archive, **not** a backlog), `all` (files across
 wiki+raw+templates minus `_template`; **double-counts a promoted item** — never
 "total memory"), `examples`, `projects`, `workflows`, `rawProj`, `rawFlow`; captures
-`capN`/`draftN`/`apprN` + `drafts[]`; `knowledgeN` plus lineage coverage; a 30-day
+`capN = draftN + heldN + ingestedN` with `drafts[]`/`held[]` and the count-only
+`captures.{legacyApprovedN, mismatchN, layoutWarningN, holdWarningN}` — Draft / on hold /
+Ingested classified exactly as the memory repo's capture inventory does (its ADR-0002: no
+triage or approval; legacy `Status: Approved` = Ingested; `server/src/captures.js`);
+`knowledgeN` plus lineage coverage; a 30-day
 knowledge-intake `series` keyed on explicit `source_id` + `knowledge_intake_date`
 origins, with `promoted_from` pages resolving to those origins instead of counting
-again (ADR-0003); a 7-day `week` by mtime (`weekTotal`, `activeDays`); `recent`; `health` from
-the first `lint` entry in `wiki/log.md`; `trend`.
+again (ADR-0003); a 7-day `week` by mtime (`weekTotal`, `activeDays`); `recent`; `health`
+from the newest `lint | maintenance pass` entry across `wiki/log.md` and its archive (due at
+7+ days, `overdue` at 10+, plus `ingestedSincePass`); `trend`.
 
 Lineage fields live in YAML frontmatter. Intake origins declare `source_id` and a bare,
 unquoted `knowledge_intake_date: YYYY-MM-DD`; timestamps, quoted dates, comments, invalid

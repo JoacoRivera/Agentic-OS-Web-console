@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 
 /**
- * One diagnostic card (plan: Overview). Docs/drafts/lint rows come from the
+ * One diagnostic card (plan: Overview). Docs/drafts/maintenance rows come from the
  * metrics prop; workflow/skill rows come from their registries live (re-read
  * whenever metrics refresh — reads are live, no cache). The ground-truth and
  * parity checks are local scripts, not browser calls, so they stay pointers.
  */
 export default function RepoHealth({ metrics }) {
-  const { wikiN, rawN, draftN, health } = metrics;
+  const { wikiN, rawN, draftN, heldN = 0, health } = metrics;
   const [registries, setRegistries] = useState(null);
 
   useEffect(() => {
@@ -52,12 +52,13 @@ export default function RepoHealth({ metrics }) {
       k: 'Draft captures',
       v: String(draftN),
       warn: draftN > 0,
-      note: draftN > 0 ? 'awaiting review' : 'all reviewed',
+      note: draftN > 0 ? 'waiting for /aos-ingest' : heldN > 0 ? `${heldN} on hold` : 'all ingested',
     },
     {
-      k: 'Lint age',
+      k: 'Maintenance pass',
       v: health.ageLabel.toLowerCase(),
       warn: health.healthStale,
+      note: health.overdue ? 'overdue' : health.healthStale ? 'due' : '',
     },
     {
       k: 'Metrics ground-truth',

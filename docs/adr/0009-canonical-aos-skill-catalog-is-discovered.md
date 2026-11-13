@@ -1,6 +1,6 @@
 # Canonical `aos-*` skill catalog is discovered, not fixed
 
-Status: accepted — 2026-07-30
+Status: accepted — 2026-07-30; observation updated 2026-11-13
 
 ## Context
 
@@ -74,3 +74,15 @@ retires a skill.
 - There is no requirement for 15 Guided Operation cards. Coverage grows from
   real user workflows, while skill-backed cards remain live-registry
   conformant.
+
+## Observation update (2026-11-13)
+
+The decision held without a code change: the live catalog moved from 15 to **11** skills and
+the registry, `verify` and `check:skills` recounted it on their own. Retired in the memory
+repo since 2026-07-30: `aos-hook`, `aos-task-mode`, `aos-verify-block` and
+`aos-test-wiki-lint` (unused report-only skills, folded or removed, memory repo #108) and
+`aos-promote-draft-memory` (triage retired by the memory repo's ADR-0002). Added:
+`aos-independent-review`. The guided Operation cards that pointed at retired skills were
+re-pointed at live ones (`/aos-plan`, `/aos-implement`, `/aos-reconcile`, and the maintenance
+pass through `/aos-wiki-lint`), which is exactly the drift the live-registry cross-check in
+`verify` exists to catch.

@@ -34,7 +34,7 @@ export default function Sidebar({ section, onSelect, ready, metrics }) {
             {id === 'memory-health' && metrics && (
               <span className={`chip ${metrics.health.healthStale ? 'warn' : 'ok'}`}>
                 <span className="status-dot" />
-                {metrics.health.healthStale ? 'due' : 'ok'}
+                {metrics.health.overdue ? 'overdue' : metrics.health.healthStale ? 'due' : 'ok'}
               </span>
             )}
           </button>
