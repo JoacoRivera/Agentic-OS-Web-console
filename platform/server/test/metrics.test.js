@@ -734,3 +734,50 @@ test('GET /api/metrics returns the documented fields', async () => {
   assert.equal(m.series.length, 30);
   assert.equal(m.week.length, 7);
 });
+
+test('health.reviewBy mirrors wiki-lint check 25 and never moves the maintenance cadence', async () => {
+  // Pinned clock: review-by states depend on "today", never the wall clock.
+  const NOW = new Date('2026-11-14T12:00:00');
+  const reviewRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'metrics-review-by-'));
+  try {
+    await write(reviewRoot, 'wiki/log.md', [
+      '# Log',
+      '',
+      '## [2026-11-12] lint | maintenance pass',
+      '- clean; old note review-by: 2026-01-01',
+      '',
+    ].join('\n'));
+    await write(reviewRoot, 'wiki/log/2026-10.md', '## [2026-10-01] lint | x\nreview-by: 2026-01-01\n');
+    await write(reviewRoot, 'wiki/lessons.md', [
+      '---',
+      'tags: [lesson]',
+      'updated: 2026-11-01',
+      '---',
+      '# Lessons',
+      '- Due `review-by: 2026-01-31`',
+      '- Pending review-by: 2099-01-01',
+      '- Malformed review-by: soon',
+      '- The `review-by:` convention, mentioned in prose.',
+    ].join('\n'));
+    await write(reviewRoot, 'wiki/index.md', '# Index\n\nreview-by: 2026-11-14\n');
+
+    const m = await computeMetrics(createConfig({ REPO_ROOT: reviewRoot }), NOW);
+    assert.deepEqual(m.health.reviewBy, {
+      dueN: 2,
+      malformedN: 1,
+      pendingN: 1,
+      nextDue: '2099-01-01',
+      items: [
+        { path: 'wiki/lessons.md', line: 6, date: '2026-01-31', state: 'due' },
+        { path: 'wiki/index.md', line: 3, date: '2026-11-14', state: 'due' },
+        { path: 'wiki/lessons.md', line: 8, date: 'soon', state: 'malformed' },
+      ],
+    });
+    // Due review-by dates are information only: the pass two days ago is on time.
+    assert.equal(m.health.passAge, 2);
+    assert.equal(m.health.healthStale, false);
+    assert.equal(m.health.overdue, false);
+  } finally {
+    await fs.rm(reviewRoot, { recursive: true, force: true });
+  }
+});

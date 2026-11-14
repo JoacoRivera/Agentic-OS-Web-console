@@ -1085,7 +1085,7 @@ svg.growth {
 .wf-name { color: var(--text); }
 .wf-kind { color: var(--dim); }
 .wf-failing { color: var(--accent-2); }
-.wf-mtime { color: var(--muted); font-size: 11px; }
+.wf-updated { color: var(--muted); font-size: 11px; }
 
 .wf-detail-head {
   display: flex;

@@ -3,6 +3,8 @@ import path from 'node:path';
 import matter from 'gray-matter';
 import { safeResolve } from './paths.js';
 import { hrefResolvesTo, MD_LINK_RE, WIKILINK_RE } from './docs.js';
+import { calendarDay, daysBetween, localIsoDay } from './dates.js';
+import { scanReviewBy } from './reviewBy.js';
 
 /**
  * Workflow registry (ADR-0006/0007): status is driven by objective defects
@@ -10,6 +12,11 @@ import { hrefResolvesTo, MD_LINK_RE, WIKILINK_RE } from './docs.js';
  * A workflow with no `workflow_kind` is Unclassified — the kind is never
  * inferred and there is no default. Precedence (first match wins):
  * Missing links > Needs review > Unclassified > Stale > OK.
+ *
+ * Stale means the workflow's own frontmatter `updated:` day is more than
+ * WORKFLOW_STALE_DAYS before today. File mtime is never evidence of age — a
+ * clone or pull resets it — and neither is Git. A missing or invalid
+ * `updated:` is a metadata defect (wiki-lint check 2 requires the key).
  */
 
 export const WORKFLOWS_ROOT = 'wiki/workflows';
@@ -48,7 +55,21 @@ export class NotAWorkflowError extends Error {
   }
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+// The frontmatter block as written, and its top-level `updated:` line. YAML
+// turns `2026-13-45` into a rolled-over valid Date, and gray-matter's cached
+// result omits `.matter`, so the value is read from the original text.
+const FRONTMATTER_RE = /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
+const UPDATED_LINE_RE = /^updated[ \t]*:(.*)$/m;
+
+/** The `updated:` value as written (quotes and a `# comment` stripped), or undefined when absent. */
+function updatedSource(text) {
+  const block = text.match(FRONTMATTER_RE);
+  const line = block?.[1].match(UPDATED_LINE_RE);
+  if (!line) return undefined;
+  let value = line[1].replace(/(^|[ \t])#.*$/, '').trim();
+  if (/^(["']).*\1$/.test(value)) value = value.slice(1, -1);
+  return value;
+}
 
 const inExcludedDir = (relPath) =>
   relPath
@@ -121,7 +142,8 @@ const ACCEPTED_MARKER_RE = /accepted|standing/i;
  */
 const FIX_HINTS = {
   indexed: 'Add a link to this workflow in wiki/index.md.',
-  metadata: 'Fix the frontmatter (see detail) — valid YAML, a known workflow_kind, checks_exempt as a list, updated as YYYY-MM-DD.',
+  metadata:
+    'Fix the frontmatter (see detail) — valid YAML, a known workflow_kind, checks_exempt as a list, and an updated: line with a real YYYY-MM-DD date.',
   todos: "Resolve the TODO/FIXME/open-questions items, or mark them 'accepted'/'standing' if they are deliberate.",
   verification:
     "Add a '## Verification' section (or a 'Manual run checklist' / 'Result recording'), or state 'Verification: not applicable' as an explicit decision.",
@@ -151,7 +173,7 @@ function findOpenTodos(body) {
  * kind-dependent checks are `n/a` while the workflow is Unclassified —
  * suppressed, never assumed passing (ADR-0007).
  */
-function evaluateWorkflow(config, ctx, relPath, text, stat, now) {
+function evaluateWorkflow(config, ctx, relPath, text, now) {
   // Tolerant frontmatter parse — a broken YAML block is a metadata defect,
   // not an unreadable workflow.
   let fm = {};
@@ -183,15 +205,22 @@ function evaluateWorkflow(config, ctx, relPath, text, stat, now) {
       metadataProblems.push('checks_exempt must be a list of check ids');
     }
   }
-  if (fm.updated !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(fm.updated instanceof Date ? fm.updated.toISOString().slice(0, 10) : fm.updated))) {
-    metadataProblems.push(`updated ${JSON.stringify(fm.updated)} is not a YYYY-MM-DD date`);
-  }
+  const updatedText = updatedSource(text);
+  const updated = calendarDay(updatedText);
+  const updatedProblem =
+    updatedText === undefined
+      ? 'updated is missing (wiki-lint check 2 requires it)'
+      : updated === null
+        ? `updated ${JSON.stringify(updatedText)} is not a YYYY-MM-DD date`
+        : null;
+  if (updatedProblem) metadataProblems.push(updatedProblem);
+  const ageDays = updated === null ? null : daysBetween(updated, localIsoDay(now));
 
   const isExempt = (id) => exempt.includes(id);
   const kindBooleans = kindKnown ? WORKFLOW_KINDS[declaredKind] : null;
   const checks = [];
-  const required = (id, label, pass, detail = '') => {
-    const status = isExempt(id) ? 'exempt' : pass ? 'pass' : 'fail';
+  const required = (id, label, pass, detail = '', { waivable = true } = {}) => {
+    const status = waivable && isExempt(id) ? 'exempt' : pass ? 'pass' : 'fail';
     checks.push({
       id,
       label,
@@ -222,7 +251,16 @@ function evaluateWorkflow(config, ctx, relPath, text, stat, now) {
     ctx.indexText !== null && textLinksTo(ctx.indexText, 'wiki', relPath),
     ctx.indexText === null ? 'wiki/index.md not found' : ''
   );
-  required('metadata', 'Metadata is valid', metadataProblems.length === 0, metadataProblems.join('; '));
+  if (isExempt('metadata') && updatedProblem) {
+    // checks_exempt waives metadata problems, never the updated: date: without
+    // it the row's age is unknown, so it could neither turn Stale nor honestly
+    // read OK (ADR-0006 amendment, 2026-11-14).
+    required('metadata', 'Metadata is valid', false, `${updatedProblem} — checks_exempt cannot waive it`, {
+      waivable: false,
+    });
+  } else {
+    required('metadata', 'Metadata is valid', metadataProblems.length === 0, metadataProblems.join('; '));
+  }
   const todos = findOpenTodos(body);
   required(
     'todos',
@@ -252,6 +290,18 @@ function evaluateWorkflow(config, ctx, relPath, text, stat, now) {
     ctx.usageText !== null && textLinksTo(ctx.usageText, 'wiki', relPath)
   );
   informational('has-examples', 'Has an examples/ folder', ctx.exampleDirs.has(`${baseDir}/examples`));
+  // wiki-lint check 25 on this page alone: a due or malformed `review-by:`
+  // date is worth seeing, but it is informational — never a status input.
+  const reviewBy = scanReviewBy(text, localIsoDay(now)).filter((hit) => hit.state !== 'pending');
+  informational(
+    'review-by',
+    'No review-by date is due',
+    reviewBy.length === 0,
+    reviewBy
+      .slice(0, 3)
+      .map((hit) => `line ${hit.line}: ${hit.date} ${hit.state === 'due' ? 'is due' : 'is malformed (want YYYY-MM-DD)'}`)
+      .join(' · ')
+  );
 
   // ---- status roll-up: first match wins (ADR-0006/0007) ----
   const failed = (id) => checks.find((c) => c.id === id)?.status === 'fail';
@@ -260,7 +310,7 @@ function evaluateWorkflow(config, ctx, relPath, text, stat, now) {
   else if (failed('metadata') || failed('todos') || failed('verification') || failed('runbook-shape'))
     status = 'needs-review';
   else if (!kindKnown) status = 'unclassified';
-  else if (now.getTime() - stat.mtimeMs > config.WORKFLOW_STALE_DAYS * DAY_MS) status = 'stale';
+  else if (ageDays > config.WORKFLOW_STALE_DAYS) status = 'stale';
   else status = 'ok';
 
   return {
@@ -272,7 +322,8 @@ function evaluateWorkflow(config, ctx, relPath, text, stat, now) {
     requiresVerification: kindBooleans?.requiresVerification ?? null,
     requiresRunbookShape: kindBooleans?.requiresRunbookShape ?? null,
     checksExempt: exempt,
-    mtime: new Date(stat.mtimeMs).toISOString(),
+    updated,
+    ageDays,
     status,
     statusLabel: STATUS_LABELS[status],
     failingRequired: checks.filter((c) => c.category === 'required' && c.status === 'fail').length,
@@ -319,9 +370,8 @@ export async function listWorkflows(config, now = new Date()) {
 
   const workflows = await Promise.all(
     workflowPaths.map(async (relPath) => {
-      const abs = path.join(config.REPO_ROOT, relPath);
-      const [text, stat] = await Promise.all([fs.readFile(abs, 'utf8'), fs.stat(abs)]);
-      return evaluateWorkflow(config, ctx, relPath, text, stat, now);
+      const text = await fs.readFile(path.join(config.REPO_ROOT, relPath), 'utf8');
+      return evaluateWorkflow(config, ctx, relPath, text, now);
     })
   );
 
@@ -349,14 +399,14 @@ export async function getWorkflow(config, relPathInput, now = new Date()) {
     );
   }
 
-  const [text, stat] = await Promise.all([fs.readFile(abs, 'utf8'), fs.stat(abs)]);
+  const text = await fs.readFile(abs, 'utf8');
   const [{ exampleDirs, relatedFiles }, ctxBase] = await Promise.all([
     scanWorkflowsRoot(config),
     loadRegistryContext(config),
   ]);
   const ctx = { ...ctxBase, exampleDirs };
 
-  const workflow = evaluateWorkflow(config, ctx, relPath, text, stat, now);
+  const workflow = evaluateWorkflow(config, ctx, relPath, text, now);
   const ownDir = relPath.replace(/\.md$/i, '') + '/';
   return {
     ...workflow,

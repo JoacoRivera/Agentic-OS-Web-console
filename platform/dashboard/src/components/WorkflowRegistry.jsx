@@ -51,7 +51,7 @@ export default function WorkflowRegistry({ data, selected, onSelect }) {
                 <td className="wf-name">{w.name}</td>
                 <td className="wf-kind">{w.kind ?? '—'}</td>
                 <td className="wf-failing">{w.failingRequired > 0 ? w.failingRequired : ''}</td>
-                <td className="wf-mtime">{w.mtime.slice(0, 10)}</td>
+                <td className="wf-updated">{w.updated ?? '—'}</td>
               </tr>
             ))}
           </tbody>
