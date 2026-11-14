@@ -132,7 +132,8 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
    newest `lint | maintenance pass` entry across `wiki/log.md` and `wiki/log/YYYY-MM.md`
    (`scripts/wiki_log.py`); other `lint` entries never reset it, and archive files are not
    pages. When those scripts change, `server/src/captures.js` and the
-   `check:metrics-groundtruth` recount change with them.
+   `check:metrics-groundtruth` recount change with them — and when `scripts/aos_status.py`
+   changes, `server/src/sessionStatus.js` follows (`check:session-status` compares them).
 
 ## Domain language (use these exact terms)
 
