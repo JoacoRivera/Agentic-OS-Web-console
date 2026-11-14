@@ -24,7 +24,7 @@ yet) — see ADR-0005.
 | `npm run check:skills` | Skill registry vs an independent recount, including exact `frontmatter.name` = directory conformance |
 | `npm run check:metrics-groundtruth` | `/api/metrics` vs an independent recount of the active filesystem roots (permanent check, ADR-0002) |
 | `npm run check:family-health` | Family Health record parses and stays confined to its own root; prints counts only; skips when `HEALTH_REPO_ROOT` is unset. **Not** in the executable allowlist (ADR-0010) |
-| `npm run check:session-status` | Session Status lines vs the memory repo's own `scripts/aos_status.py` on the live `REPO_ROOT`; skips when `python3` or the script is missing. Terminal-only: **not** in the executable allowlist and not in CI (it runs memory-repo Python) |
+| `npm run check:session-status` | Session Status lines vs the memory repo's own `scripts/aos_status.py` on the live `REPO_ROOT`; needs `python3` with PyYAML (skips when `python3` or the script is missing; exits 2 *inconclusive* when a degraded line was skipped, 1 on drift). Terminal-only: **not** in the executable allowlist and not in CI (it runs memory-repo Python) |
 
 ## Test strategy
 

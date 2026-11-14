@@ -7,8 +7,14 @@
 //
 // Terminal-only, on purpose: it is NOT in the Phase-3 executable allowlist
 // and NOT in CI, because it runs memory-repo Python (ADR-0001: the console
-// executes only its own deterministic checks). Exits 0 with "– skipped" when
-// python3 or the script is missing; exits 1 on any mismatch, printing both.
+// executes only its own deterministic checks). Needs python3 with PyYAML (the
+// script's capture inventory imports it).
+//
+// Exit codes: 0 — every comparison matched (or "– skipped" because python3 or
+// the script is missing); 1 — any mismatch, printing both sides; 2 —
+// inconclusive: no mismatch, but a degraded line or setup note (script
+// without PyYAML, either side out of its time budget) was skipped, so not
+// everything was compared.
 //
 // Usage: REPO_ROOT=<memory repo> node scripts/check-session-status.mjs
 import { execFile } from 'node:child_process';
@@ -72,19 +78,27 @@ const theirs = byLabel(output.split('\n'));
 const mine = byLabel(ours.lines);
 
 let failed = 0;
+let skipped = 0;
 const record = (name, ok, detail = '') => {
   if (!ok) failed++;
   console.log(`${ok ? '✔' : '✖'} ${name}${detail ? `\n    console: ${detail[0]}\n    script:  ${detail[1]}` : ''}`);
 };
-// A degraded line (the script lacking PyYAML, either side out of time) is an
-// environment fact, not a rule drift: report it and move on.
+const skip = (name, a, b) => {
+  skipped++;
+  console.log(`– ${name}: skipped (degraded)\n    console: ${a}\n    script:  ${b}`);
+};
+// A degraded line or note (the script lacking PyYAML, either side out of
+// time) is an environment fact, not a rule drift: report it, compare the
+// rest, and end inconclusive rather than green.
 const DEGRADED = /^[a-z ]+: (unavailable \(|skipped \(time budget\))/;
 const ourTimeout = (line) => /^[a-z ]+: skipped \(time budget\)$/.test(line ?? '');
 
 for (const label of ['maintenance pass', 'captures', 'on hold', 'git']) {
   const [a, b] = [mine[label], theirs[label]];
-  if (DEGRADED.test(b ?? '') || ourTimeout(a)) {
-    console.log(`– ${label}: skipped (degraded)\n    console: ${a}\n    script:  ${b}`);
+  // `on hold:` comes from the same check as `captures:`; it degrades with it.
+  const source = label === 'on hold' ? 'captures' : label;
+  if (DEGRADED.test(theirs[source] ?? '') || ourTimeout(mine[source])) {
+    skip(label, a, b);
     continue;
   }
   if (a === null && b === null) {
@@ -105,18 +119,26 @@ else if (setup.startsWith('setup: ')) {
   notes = n.split('; ');
   oks = o ? o.split(', ') : [];
 }
+const setupDegraded = DEGRADED.test(setup); // the whole setup check failed in the script
 const setupAgrees = (label, note) => (note === null ? oks.includes(label) : notes.includes(note));
-const hook = githookNote(ours.setup.githook);
-const host = hostNote(ours.setup.host);
-record(
-  'setup githook agrees with aos_status.py',
-  setupAgrees('githook', hook),
-  setupAgrees('githook', hook) ? '' : [hook ?? 'githook ok', setup]
-);
-record(
-  'setup host row agrees with aos_status.py',
-  setupAgrees(`host ${ours.setup.host.name}`, host),
-  setupAgrees(`host ${ours.setup.host.name}`, host) ? '' : [host ?? `host ${ours.setup.host.name} ok`, setup]
-);
+const theirNote = (label) => notes.find((n) => n.startsWith(`${label}: `)) ?? null;
 
-process.exit(failed ? 1 : 0);
+function compareSetup(name, label, ourNote, ourDegraded) {
+  const their = theirNote(label);
+  if (setupDegraded || ourDegraded || (their !== null && DEGRADED.test(their))) {
+    skip(name, ourNote ?? `${label} ok`, their ?? setup);
+    return;
+  }
+  const agrees = setupAgrees(label, ourNote);
+  record(`${name} agrees with aos_status.py`, agrees, agrees ? '' : [ourNote ?? `${label} ok`, setup]);
+}
+
+compareSetup('setup githook', 'githook', githookNote(ours.setup.githook), ours.setup.githook.reason === 'timeout');
+compareSetup('setup host row', `host ${ours.setup.host.name}`, hostNote(ours.setup.host), false);
+
+if (failed) process.exit(1);
+if (skipped) {
+  console.log(`inconclusive: ${skipped} line(s) skipped`);
+  process.exit(2);
+}
+process.exit(0);
