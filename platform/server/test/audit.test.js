@@ -84,3 +84,48 @@ test('the oldest rotation beyond AUDIT_ROTATE_KEEP is dropped, newest are kept',
   assert.deepEqual(tail.entries.map((e) => e.seq), [5, 6, 7]);
   await fs.rm(dir, { recursive: true, force: true });
 });
+
+test('findLastAuditEntry returns the newest entry for an op, skipping other ops and non-JSON lines', async () => {
+  const { findLastAuditEntry } = await import('../src/audit.js');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'aos-audit-find-'));
+  const logPath = path.join(dir, 'operations.log');
+  await fs.writeFile(
+    logPath,
+    [
+      JSON.stringify({ op: 'check:wiki-structure', seq: 1 }),
+      JSON.stringify({ op: 'check:paths', seq: 2 }),
+      JSON.stringify({ op: 'check:wiki-structure', seq: 3 }),
+      JSON.stringify({ op: 'check:paths', seq: 4 }),
+      'not-json line',
+    ].join('\n') + '\n'
+  );
+  const config = createConfig({ REPO_ROOT: '/tmp/fixture-root', AUDIT_LOG_PATH: logPath });
+  assert.equal((await findLastAuditEntry(config, 'check:wiki-structure')).seq, 3);
+  assert.equal((await findLastAuditEntry(config, 'check:paths')).seq, 4);
+  assert.equal(await findLastAuditEntry(config, 'verify'), null);
+  await fs.rm(dir, { recursive: true, force: true });
+});
+
+test('findLastAuditEntry finds an entry that only survives in a rotated file', async () => {
+  const { appendAuditEntry, findLastAuditEntry } = await import('../src/audit.js');
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'aos-audit-find-rot-'));
+  const config = createConfig({
+    REPO_ROOT: '/tmp/fixture-root',
+    AUDIT_LOG_PATH: path.join(dir, 'operations.log'),
+    AUDIT_ROTATE_BYTES: '1', // rotate on every append after the first
+    AUDIT_ROTATE_KEEP: '3',
+  });
+  await appendAuditEntry(config, { op: 'check:wiki-structure', seq: 0 });
+  await appendAuditEntry(config, { op: 'check:paths', seq: 1 });
+  await appendAuditEntry(config, { op: 'check:paths', seq: 2 });
+  // seq 0 now lives in operations.log.2, the live file holds seq 2.
+  assert.equal((await findLastAuditEntry(config, 'check:wiki-structure')).seq, 0);
+  assert.equal(await findLastAuditEntry(config, 'verify'), null);
+  await fs.rm(dir, { recursive: true, force: true });
+});
+
+test('findLastAuditEntry is null when no log exists', async () => {
+  const { findLastAuditEntry } = await import('../src/audit.js');
+  const config = createConfig({ REPO_ROOT: '/tmp/fixture-root', AUDIT_LOG_PATH: '/tmp/fixture-root/no-such.log' });
+  assert.equal(await findLastAuditEntry(config, 'check:wiki-structure'), null);
+});

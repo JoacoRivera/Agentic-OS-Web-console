@@ -31,7 +31,7 @@ import { listWorkflows, getWorkflow } from './workflows.js';
 import { listSkills } from './skills.js';
 import { listOperations } from './operations.js';
 import { createExecutor } from './executor.js';
-import { readAuditTail } from './audit.js';
+import { readAuditTail, findLastAuditEntry } from './audit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '../../dashboard/dist');
@@ -204,6 +204,31 @@ export function createApp(config, { executor = createExecutor(config), financeCa
       res.json(await readAuditTail(config));
     } catch (err) {
       res.status(500).json({ error: 'audit-failed', message: err.message });
+    }
+  });
+
+  // Maintenance: the last audited check:wiki-structure run (ADR-0001
+  // amendment, 2026-11-14) — a snapshot of that run, never a live lint and
+  // never a cadence input. No file contents: only the parsed lint result.
+  const WIKI_STRUCTURE_OP = 'check:wiki-structure';
+  app.get('/api/maintenance/wiki-structure', async (req, res) => {
+    try {
+      const entry = await findLastAuditEntry(config, WIKI_STRUCTURE_OP);
+      res.json({
+        operation: listOperations().operations.find((op) => op.id === WIKI_STRUCTURE_OP) ?? null,
+        lastRun: entry
+          ? {
+              ts: entry.ts ?? null,
+              status: entry.status ?? null,
+              exitCode: entry.exitCode ?? null,
+              durationMs: entry.durationMs ?? null,
+              result: entry.result ?? null,
+            }
+          : null,
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      res.status(500).json({ error: 'wiki-structure-failed', message: err.message });
     }
   });
 

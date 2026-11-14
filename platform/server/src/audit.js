@@ -86,3 +86,28 @@ export async function readAuditTail(config, limit = AUDIT_TAIL_LIMIT) {
     generatedAt: new Date().toISOString(),
   };
 }
+
+/**
+ * The newest audit entry for one operation id, scanning newest-first across
+ * the live file and its rotations (the tail window is not enough — a run can
+ * sit far back). Non-JSON lines are skipped. null = no run on record.
+ */
+export async function findLastAuditEntry(config, op) {
+  const files = [config.AUDIT_LOG_PATH];
+  for (let i = 1; i <= Math.max(1, config.AUDIT_ROTATE_KEEP); i++) {
+    files.push(rotatedPath(config.AUDIT_LOG_PATH, i));
+  }
+  for (const file of files) {
+    const lines = await readLines(file);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      let entry;
+      try {
+        entry = JSON.parse(lines[i]);
+      } catch {
+        continue;
+      }
+      if (entry && entry.op === op) return entry;
+    }
+  }
+  return null;
+}

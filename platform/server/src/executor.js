@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EXECUTABLE_ALLOWLIST } from './operations.js';
 import { appendAuditEntry } from './audit.js';
+import { parseWikiLintReport } from './wikiLint.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PLATFORM_DIR = path.resolve(__dirname, '../..');
@@ -29,11 +30,33 @@ const PLATFORM_DIR = path.resolve(__dirname, '../..');
  * - Every run appends one JSON line (op, ts, status, files, output) to the
  *   audit log at completion, success or failure — same shape as the
  *   synchronous era.
+ * - An id with a result parser (today only `check:wiki-structure`, ADR-0001
+ *   amendment 2026-11-14) also gets a structured `result`, parsed from the
+ *   FULL stdout before the audit tail cap and stored additively on the
+ *   snapshot and the audit line. A parser can never fail the run.
  */
 
 /** Fixed command table: every allowlisted id is exactly `npm run <id>`. */
 function defaultCommands() {
   return Object.fromEntries(EXECUTABLE_ALLOWLIST.map((id) => [id, ['npm', 'run', id]]));
+}
+
+/**
+ * Per-id result parsers, applied to the full stdout + exit code when a run
+ * finishes. Ids without one get `result: null`.
+ */
+const RESULT_PARSERS = {
+  'check:wiki-structure': parseWikiLintReport,
+};
+
+function parseResult(parsers, op, stdout, exitCode) {
+  const parser = parsers[op];
+  if (!parser) return null;
+  try {
+    return parser(stdout, exitCode);
+  } catch (err) {
+    return { parsed: false, reason: `result parser failed: ${err.message}` };
+  }
 }
 
 export const CONFIRM_TOKEN_TTL_MS = 10 * 60 * 1000;
@@ -65,10 +88,14 @@ function gitCapture(repoRoot, args) {
 }
 
 /**
- * Build the executor. `commands` and `timeoutMs` are test seams — production
- * callers take the defaults, so the table always mirrors the allowlist.
+ * Build the executor. `commands`, `timeoutMs` and `resultParsers` are test
+ * seams — production callers take the defaults, so the table always mirrors
+ * the allowlist.
  */
-export function createExecutor(config, { commands = defaultCommands(), timeoutMs = RUN_TIMEOUT_MS } = {}) {
+export function createExecutor(
+  config,
+  { commands = defaultCommands(), timeoutMs = RUN_TIMEOUT_MS, resultParsers = RESULT_PARSERS } = {}
+) {
   const tokens = new Map(); // token → { id, expiresAt }
   const jobs = new Map(); // runId → job (insertion order = start order)
   let running = null; // runId of the in-flight job, or null
@@ -122,6 +149,7 @@ export function createExecutor(config, { commands = defaultCommands(), timeoutMs
       gitAvailable: job.gitAvailable,
       changedFiles: job.changedFiles,
       gitDiff: job.gitDiff,
+      result: job.result,
     };
   }
 
@@ -193,6 +221,7 @@ export function createExecutor(config, { commands = defaultCommands(), timeoutMs
     } finally {
       job.finishedAt = new Date().toISOString();
       running = null;
+      job.result = parseResult(resultParsers, job.op, job.stdout, job.exitCode);
       // Audit at completion — same line shape as the synchronous era.
       try {
         await appendAuditEntry(config, {
@@ -207,6 +236,7 @@ export function createExecutor(config, { commands = defaultCommands(), timeoutMs
             stdout: tail(job.stdout, AUDIT_OUTPUT_CAP),
             stderr: tail(job.stderr, AUDIT_OUTPUT_CAP),
           },
+          result: job.result,
         });
       } catch (err) {
         job.stderr += `\naudit append failed: ${err.message}`;
@@ -265,6 +295,7 @@ export function createExecutor(config, { commands = defaultCommands(), timeoutMs
         gitAvailable: null,
         changedFiles: null,
         gitDiff: null,
+        result: null,
         listeners: new Set(),
       };
       running = job.runId;

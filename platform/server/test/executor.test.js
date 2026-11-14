@@ -193,3 +193,126 @@ test('the default command table is exactly `npm run <id>` for the allowlist', as
     (err) => err.status === 405
   );
 });
+
+/** Read the audit lines, waiting out the append that lands just after `done`. */
+async function readAudit(config, minLines = 1) {
+  const deadline = Date.now() + 3000;
+  for (;;) {
+    try {
+      const lines = (await fs.readFile(config.AUDIT_LOG_PATH, 'utf8')).split('\n').filter(Boolean);
+      if (lines.length >= minLines) return lines.map((l) => JSON.parse(l));
+    } catch (err) {
+      if (err.code !== 'ENOENT') throw err;
+    }
+    assert.ok(Date.now() < deadline, 'audit line did not appear');
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
+/** A node one-liner printing a canned lint report (synthetic messages). */
+const lintReport = (errors, warnings, exitCode) => {
+  const lines = [
+    '> npm preamble',
+    '## Deterministic wiki lint',
+    `- errors: ${errors.length}`,
+    `- warnings: ${warnings.length}`,
+    ...errors.map((m) => `ERROR   ${m}`),
+    ...warnings.map((m) => `WARNING ${m}`),
+  ];
+  return [node, '-e', `process.stdout.write(${JSON.stringify(lines.join('\n') + '\n')}); process.exit(${exitCode})`];
+};
+
+test('a check:wiki-structure run carries the parsed lint result on the snapshot and the audit line', async () => {
+  const { app, config } = await makeApp({
+    'check:wiki-structure': lintReport(['wiki/example/page.md: broken link'], ['wiki/example/other.md: orphan'], 1),
+  });
+  const dry = await dryRun(app, 'check:wiki-structure');
+  const run = await runAndWait(app, 'check:wiki-structure', dry.confirmToken);
+  assert.equal(run.status, 'failed');
+  assert.equal(run.exitCode, 1);
+  assert.equal(run.result.parsed, true);
+  assert.equal(run.result.errors, 1);
+  assert.equal(run.result.warnings, 1);
+  assert.deepEqual(run.result.findings, [
+    { level: 'error', message: 'wiki/example/page.md: broken link' },
+    { level: 'warning', message: 'wiki/example/other.md: orphan' },
+  ]);
+  const [entry] = await readAudit(config);
+  assert.deepEqual(entry.result, run.result);
+});
+
+test('the lint result is parsed from the full stdout, not the 4,000-char audit tail', async () => {
+  // 120 errors × ~60 chars ≫ the audit tail cap: the header counts would be
+  // cut from the audit line's output, but the stored result keeps them.
+  const errors = Array.from({ length: 120 }, (_, i) => `wiki/example/page-${String(i).padStart(3, '0')}.md: broken link to missing.md`);
+  const { app, config } = await makeApp({ 'check:wiki-structure': lintReport(errors, [], 1) });
+  const dry = await dryRun(app, 'check:wiki-structure');
+  await runAndWait(app, 'check:wiki-structure', dry.confirmToken);
+  const [entry] = await readAudit(config);
+  assert.ok(!entry.output.stdout.includes('## Deterministic wiki lint'), 'the audit tail lost the header');
+  assert.equal(entry.result.parsed, true);
+  assert.equal(entry.result.errors, 120);
+  assert.equal(entry.result.findingsTotal, 120);
+  assert.equal(entry.result.truncated, true);
+});
+
+test('ids without a result parser get result: null', async () => {
+  const { app, config } = await makeApp({ 'check:paths': [node, '-e', 'console.log("## Deterministic wiki lint")'] });
+  const dry = await dryRun(app, 'check:paths');
+  const run = await runAndWait(app, 'check:paths', dry.confirmToken);
+  assert.equal(run.result, null);
+  const [entry] = await readAudit(config);
+  assert.equal(entry.result, null);
+});
+
+test('a throwing result parser never fails the run or the audit append', async () => {
+  const { app, config } = await makeApp(
+    { 'check:wiki-structure': [node, '-e', 'console.log("ok")'] },
+    {
+      resultParsers: {
+        'check:wiki-structure': () => {
+          throw new Error('synthetic parser bug');
+        },
+      },
+    }
+  );
+  const dry = await dryRun(app, 'check:wiki-structure');
+  const run = await runAndWait(app, 'check:wiki-structure', dry.confirmToken);
+  assert.equal(run.status, 'ok');
+  assert.equal(run.result.parsed, false);
+  assert.match(run.result.reason, /synthetic parser bug/);
+  const [entry] = await readAudit(config);
+  assert.equal(entry.status, 'ok');
+  assert.equal(entry.result.parsed, false);
+});
+
+test('GET /api/maintenance/wiki-structure: no run on record, then the last run projected', async () => {
+  const { app, config } = await makeApp({ 'check:wiki-structure': lintReport([], [], 0) });
+  const before = await get(app, '/api/maintenance/wiki-structure');
+  assert.equal(before.status, 200);
+  assert.equal(before.body.operation.id, 'check:wiki-structure');
+  assert.equal(before.body.operation.type, 'executable');
+  assert.equal(before.body.lastRun, null);
+
+  const dry = await dryRun(app, 'check:wiki-structure');
+  const run = await runAndWait(app, 'check:wiki-structure', dry.confirmToken);
+  await readAudit(config);
+  const after = await get(app, '/api/maintenance/wiki-structure');
+  assert.equal(after.status, 200);
+  assert.deepEqual(Object.keys(after.body.lastRun).sort(), ['durationMs', 'exitCode', 'result', 'status', 'ts']);
+  assert.equal(after.body.lastRun.ts, run.ts);
+  assert.equal(after.body.lastRun.status, 'ok');
+  assert.equal(after.body.lastRun.exitCode, 0);
+  assert.equal(after.body.lastRun.result.parsed, true);
+  assert.equal(after.body.lastRun.result.errors, 0);
+  // Only the projection: no raw stdout/stderr through this endpoint.
+  assert.equal('output' in after.body.lastRun, false);
+});
+
+test('GET /api/maintenance/wiki-structure sits behind the Host/Origin guard', async () => {
+  const { app } = await makeApp({});
+  const badHost = await request(app).get('/api/maintenance/wiki-structure').set('Host', 'evil.example');
+  assert.equal(badHost.status, 403);
+  const badOrigin = await get(app, '/api/maintenance/wiki-structure').set('Origin', 'http://evil.example');
+  assert.equal(badOrigin.status, 403);
+});
