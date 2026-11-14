@@ -469,3 +469,57 @@ test('fixture: /api/evals reads the recorded verdicts the fixture holds', async 
   );
   assert.equal(problemCount, 0);
 });
+
+// Memory-flow stats (i04, memory-stats.py rules) at FIXED_NOW, hand-derived from
+// the intake dates above and the dated ingest entries in the log and archive.
+// Latency (ingest - intake, days): 2, 4, 4, 5, 20, 27; ingested-without-evidence
+// and ingested-status-mismatch have no dated ingest entry. Passes 2025-12-05 and
+// 2026-01-15. Draft ages: 4, 6, 7, 10, 35, 53 (unlineaged + future-dated have
+// none); on-hold ages: 43, 65. Medians average the middle pair; p90 = rank ceil(0.9n).
+const FLOW_AT_FIXED_NOW = {
+  today: '2026-02-01',
+  captures: { total: 18, unlineaged: 2 },
+  months: [
+    { month: '2025-11', captures: 3, ingestEntries: 0 },
+    { month: '2025-12', captures: 5, ingestEntries: 2 },
+    { month: '2026-01', captures: 8, ingestEntries: 4 },
+  ],
+  latency: {
+    n: 6, min: 2, median: 4.5, p90: 27, max: 27,
+    buckets: [
+      { label: 'same day', count: 0 },
+      { label: '1-3d', count: 1 },
+      { label: '4-7d', count: 3 },
+      { label: '8-30d', count: 2 },
+      { label: '>30d', count: 0 },
+    ],
+    noDatedIngestEntry: 2,
+    ingestBeforeIntake: 0,
+  },
+  passes: {
+    days: 2,
+    newest: LAST_PASS,
+    openGapDays: 17,
+    gaps: { n: 1, min: 41, median: 41, p90: 41, max: 41 },
+    gapsOverCadence: 1,
+    cadenceDays: 7,
+    longestGap: { from: '2025-12-05', to: LAST_PASS, days: 41 },
+  },
+  queue: {
+    draft: { count: 8, unlineaged: 2, ages: { n: 6, min: 4, median: 8.5, p90: 53, max: 53 } },
+    onHold: { count: 2, unlineaged: 0, ages: { n: 2, min: 43, median: 54, p90: 65, max: 65 } },
+  },
+};
+
+test('fixture: memory-flow stats at FIXED_NOW (latency, pass gap, queue ages are non-zero)', async () => {
+  const { flow, capN, draftN, heldN } = await computeMetrics(config, FIXED_NOW);
+  assert.deepEqual(flow, FLOW_AT_FIXED_NOW);
+  // Cross-checks against the table: same capture population and queue sizes.
+  assert.equal(flow.captures.total, capN);
+  assert.equal(flow.queue.draft.count, draftN);
+  assert.equal(flow.queue.onHold.count, heldN);
+  assert.equal(
+    flow.captures.unlineaged,
+    count((r) => r.capture && r.capture !== 'layout-warning' && r.lineage !== 'origin')
+  );
+});
