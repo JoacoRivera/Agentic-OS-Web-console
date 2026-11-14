@@ -5,9 +5,12 @@ import { fmtDay, fmtDayPlus } from '../format.js';
  * since the newest `lint | maintenance pass` log entry, read across
  * wiki/log.md and its monthly archive. Only that subject resets the timer;
  * the pass is due at 7+ days (or when none exists) and overdue at 10+.
+ *
+ * Review-by dates (wiki-lint check 25) sit under it as information only:
+ * a due date never changes the cadence chip.
  */
 export default function HealthPanel({ metrics }) {
-  const { lastPass, healthStale, overdue, ageLabel, staleDays, ingestedSincePass } = metrics.health;
+  const { lastPass, healthStale, overdue, ageLabel, staleDays, ingestedSincePass, reviewBy } = metrics.health;
   const state = overdue ? 'overdue' : healthStale ? 'due' : 'ok';
   return (
     <div className="panel">
@@ -32,6 +35,26 @@ export default function HealthPanel({ metrics }) {
           </span>
           <span className="run-time">{ingestedSincePass}</span>
         </div>
+      )}
+      {reviewBy && (
+        <>
+          <div className="run" title="wiki-lint check 25 · information only, never changes the cadence">
+            <span className="run-name">
+              Review-by dates <span className="dim">· {reviewBy.dueN} due</span>
+              {reviewBy.malformedN > 0 && <span className="dim"> · {reviewBy.malformedN} malformed</span>}
+            </span>
+            <span className="run-time">{reviewBy.nextDue ? `next due ${reviewBy.nextDue}` : '—'}</span>
+          </div>
+          {reviewBy.items.map((item) => (
+            <div key={`${item.path}:${item.line}:${item.date}`} className="run review-by-item">
+              <span className="run-time">{item.date}</span>
+              <span className="run-name" title={`${item.path}:${item.line}`}>
+                {item.path}:{item.line}
+              </span>
+              <span className="run-path">{item.state === 'due' ? 'due' : 'malformed (want YYYY-MM-DD)'}</span>
+            </div>
+          ))}
+        </>
       )}
       <div className="panel-note">
         {healthStale

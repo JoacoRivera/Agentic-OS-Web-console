@@ -11,6 +11,7 @@ import {
   readLogEntries,
 } from './captures.js';
 import { calendarDay } from './dates.js';
+import { collectReviewBy } from './reviewBy.js';
 
 /**
  * Canonical memory metrics (ADR-0002): a live filesystem scan. Scalar file
@@ -458,6 +459,10 @@ export async function computeMetrics(config, now = new Date()) {
   const ageLabel =
     passAge === null ? 'NEVER' : passAge <= 0 ? 'TODAY' : passAge === 1 ? '1 DAY AGO' : `${passAge} DAYS AGO`;
 
+  // ---- review-by dates (wiki-lint check 25), wiki-wide, information only ----
+  // Every wiki/ page lint scans (index/README included), the log excepted.
+  const reviewBy = await collectReviewBy(repoRoot, byRoot.wiki.map((p) => p.path), now);
+
   return {
     wikiN: wiki.length,
     rawN: raw.length,
@@ -493,6 +498,7 @@ export async function computeMetrics(config, now = new Date()) {
       staleDays: MAINTENANCE_DUE_DAYS,
       overdueDays: MAINTENANCE_OVERDUE_DAYS,
       ingestedSincePass: ingestedSincePass(buckets, firstIngest, logEntries, pass),
+      reviewBy, // never feeds healthStale/overdue — the cadence is the pass alone
     },
     trend: weekTotal > 0 ? 'ACTIVE' : 'IDLE',
     generatedAt: now.toISOString(),
