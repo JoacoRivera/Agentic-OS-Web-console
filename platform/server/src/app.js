@@ -32,6 +32,7 @@ import { listSkills } from './skills.js';
 import { listOperations } from './operations.js';
 import { createExecutor } from './executor.js';
 import { readAuditTail } from './audit.js';
+import { computeSessionStatus } from './sessionStatus.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.resolve(__dirname, '../../dashboard/dist');
@@ -363,6 +364,22 @@ export function createApp(config, { executor = createExecutor(config), financeCa
   app.get('/api/finance/budgets', financeRoute('budgets', readFinanceBudgets));
   app.get('/api/finance/categories', financeRoute('categories', readFinanceCategories));
   app.get('/api/finance/trends', financeRoute('trends', readFinanceTrends));
+
+  // ---- Session Status (mirrors the memory repo's scripts/aos_status.py) ----
+  // GET only, no input. Runs fixed-argv, read-only `git` in REPO_ROOT (see the
+  // sessionStatus.js header); concurrent requests share one computation so a
+  // burst of refreshes cannot fan out into a burst of git processes.
+  let sessionStatusInFlight = null;
+  app.get('/api/session-status', async (req, res) => {
+    try {
+      sessionStatusInFlight ??= computeSessionStatus(config).finally(() => {
+        sessionStatusInFlight = null;
+      });
+      res.json(await sessionStatusInFlight);
+    } catch {
+      res.status(500).json({ error: 'session-status-failed', message: 'session status read failed' });
+    }
+  });
 
   app.use('/api', (req, res) => {
     res.status(404).json({ error: 'not-found' });

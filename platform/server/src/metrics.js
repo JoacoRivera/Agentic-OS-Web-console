@@ -53,7 +53,7 @@ const isEx = (page) => page.folder.includes('examples');
 const inFolder = (page, folder) => page.path === folder || page.path.startsWith(folder + '/');
 
 /** Recursively collect markdown "pages" under `root` (repo-relative). */
-async function collectPages(repoRoot, root) {
+export async function collectPages(repoRoot, root) {
   const pages = [];
   async function walk(rel) {
     let entries;
