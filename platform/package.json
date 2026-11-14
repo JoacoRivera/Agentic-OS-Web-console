@@ -21,7 +21,8 @@
     "check:memory-recall": "node --env-file-if-exists=.env scripts/check-memory-recall.mjs",
     "check:family-health": "node --env-file-if-exists=.env scripts/check-family-health.mjs",
     "check:memory-stats-parity": "node --env-file-if-exists=.env scripts/check-memory-stats-parity.mjs",
-    "check:evals": "node --env-file-if-exists=.env scripts/check-evals.mjs"
+    "check:evals": "node --env-file-if-exists=.env scripts/check-evals.mjs",
+    "check:session-status": "node --env-file-if-exists=.env scripts/check-session-status.mjs"
   },
   "dependencies": {
     "gray-matter": "^4.0.3"

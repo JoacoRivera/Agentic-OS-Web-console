@@ -370,3 +370,35 @@ export function capturesSincePass(buckets, firstIngest, entries, lastPass) {
     )
     .map(({ path: p, origin, ingestedOn }) => ({ path: p, origin, ingestedOn }));
 }
+
+// ---------- capture age (aos_status.py `_capture_age`) ----------
+
+const INTAKE_RE = /^knowledge_intake_date\s*:\s*(\S+)/m; // frontmatter.INTAKE_RE
+const ISO_DATE_RE = /^\d{4}-\d{2}-\d{2}$/; // frontmatter.ISO_DATE
+const NAME_DATE_RE = /(\d{4}-\d{2}-\d{2})\.md$/; // aos_status.NAME_DATE_RE
+
+/** Whole days from ISO day `from` to ISO day `to` (`date` subtraction, no clock). */
+export function daysBetween(from, to) {
+  const ms = (day) => {
+    const [y, m, d] = day.split('-').map(Number);
+    return Date.UTC(y, m - 1, d);
+  };
+  return Math.round((ms(to) - ms(from)) / 86400000);
+}
+
+/**
+ * A capture's age in days on `today` (ISO day), exactly as `aos_status.py`
+ * `_capture_age`: the frontmatter `knowledge_intake_date` (quotes stripped)
+ * when it has ISO shape and is a real day, else the `YYYY-MM-DD.md` suffix of
+ * the file name, else null. Never mtime or Git history (ADR-0003).
+ */
+export function captureAgeDays(text, relPath, today) {
+  const fm = normalize(text).match(FRONTMATTER_BLOCK_RE)?.[1] ?? '';
+  const intake = fm.match(INTAKE_RE)?.[1].replace(/^["']+|["']+$/g, '');
+  let found = intake && ISO_DATE_RE.test(intake) && validDay(intake) ? intake : null;
+  if (found === null) {
+    const n = path.posix.basename(relPath).match(NAME_DATE_RE);
+    found = n && validDay(n[1]) ? n[1] : null;
+  }
+  return found === null ? null : daysBetween(found, today);
+}

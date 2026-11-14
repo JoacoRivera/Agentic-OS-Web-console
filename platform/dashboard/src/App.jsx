@@ -16,6 +16,7 @@ import ActivityView from './views/ActivityView.jsx';
 import SettingsView from './views/SettingsView.jsx';
 import FamilyHealthView from './views/FamilyHealthView.jsx';
 import FinanceView from './views/FinanceView.jsx';
+import SessionStatusView from './views/SessionStatusView.jsx';
 import { SECTIONS } from './sections.js';
 
 const DEFAULT_REFRESH_MS = 30000;
@@ -117,6 +118,9 @@ export default function App() {
     view = <ReviewQueueView metrics={metrics} metricsError={metricsError} />;
   } else if (sectionId === 'memory-health') {
     view = <MemoryHealthView metrics={metrics} metricsError={metricsError} />;
+  } else if (sectionId === 'session-status') {
+    // Fetched on mount and manual refresh only: it runs git, so not on the metrics poll.
+    view = <SessionStatusView refreshKey={manualRefreshKey} />;
   } else if (sectionId === 'activity') {
     view = <ActivityView metrics={metrics} metricsError={metricsError} />;
   } else if (sectionId === 'family-health') {

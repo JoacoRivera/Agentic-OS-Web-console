@@ -302,6 +302,20 @@ try {
     audit.status === 200 && Array.isArray(JSON.parse(audit.body).entries)
   );
 
+  // Session Status (mirrors scripts/aos_status.py): a GET-only read with every
+  // block present; unported setup checks are not-checked, never ok.
+  const session = await req(port, { reqPath: '/api/session-status' });
+  const sessionBody = session.status === 200 ? JSON.parse(session.body) : {};
+  const sessionPost = await req(port, { method: 'POST', reqPath: '/api/session-status' });
+  record(
+    '/api/session-status responds 200 with maintenance/captures/git/setup; POST is 404',
+    session.status === 200 &&
+      ['maintenance', 'captures', 'git', 'setup', 'lines'].every((k) => k in sessionBody) &&
+      sessionBody.setup.lintDeps.state === 'not-checked' &&
+      sessionBody.setup.skills.state === 'not-checked' &&
+      sessionPost.status === 404
+  );
+
   // P3 controlled execution: only allowlisted ids are executable, dry-run
   // issues the confirm token, and run without dry-run + confirm never
   // executes. verify never confirms a run — that would recurse.
