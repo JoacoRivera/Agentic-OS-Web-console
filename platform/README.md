@@ -261,9 +261,14 @@ and `spawn()` runs with `shell: false`. The flow (`server/src/executor.js`):
    `AUDIT_ROTATE_KEEP` rotated files, default 3); rotation renames whole files only and the
    reader spans rotated files, so the tail is loss-free across the boundary.
 
-CI (Phase 4.1, `.github/workflows/ci.yml`) runs the repo-independent subset on push/PR:
-`npm ci`, `npm test`, `npm run check:paths`, `npm run build`. The live-repo checks stay
-local/manual — they need the memory repo.
+CI (Phase 4.1, `.github/workflows/ci.yml`) runs on push/PR: `npm ci`, `npm test`,
+`npm run check:paths`, and `npm run ci:fixture`, which runs `check:docs`, `check:workflows`,
+`check:skills`, `check:metrics-groundtruth` and `verify` (which builds the dashboard) against
+the committed synthetic memory repo `server/test/fixtures/memory-repo/` with no `.env` and
+every optional source cleared. `ci:fixture` is a CI harness, not a `check:*` script or an
+Operation. Adding a fixture case = one file plus one row in `server/test/fixture-repo.test.js`,
+whose guard test fails when the fixture stops covering a case (see the fixture's `README.md`).
+Checks that need the memory repo's own Python scripts stay local.
 
 ## Security model
 

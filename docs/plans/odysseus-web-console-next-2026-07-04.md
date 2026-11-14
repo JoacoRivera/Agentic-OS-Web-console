@@ -42,7 +42,8 @@ is a pure table test). The live-repo checks (`check:docs`, `check:workflows`,
 repo and stay local/manual — or run in CI against a small committed fixture
 repo under `platform/server/test/fixtures/` (the tests already own such
 fixtures; reuse, don't duplicate). Verification: a red PR on a deliberately
-broken test; a green run on main.
+broken test; a green run on main. *2026-11-14: the fixture option was taken —
+`npm run ci:fixture` runs them against `platform/server/test/fixtures/memory-repo/`.*
 
 ### 4.2 Asynchronous runs with streamed output
 Replace the request-held run with a job model, keeping the safety flow
