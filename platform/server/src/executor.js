@@ -27,8 +27,10 @@ const PLATFORM_DIR = path.resolve(__dirname, '../..');
  *   a `git diff` when anything changed — the allowlisted checks are
  *   read-only, so a non-empty diff is itself a finding worth surfacing.
  * - Every run appends one JSON line (op, ts, status, files, output) to the
- *   audit log at completion, success or failure — same shape as the
- *   synchronous era.
+ *   audit log, success or failure — same shape as the synchronous era. The
+ *   line is written *before* the run is reported finished: status,
+ *   finishedAt, the single-flight release and the `done` event are published
+ *   together only once the append has settled.
  */
 
 /** Fixed command table: every allowlisted id is exactly `npm run <id>`. */
@@ -65,10 +67,14 @@ function gitCapture(repoRoot, args) {
 }
 
 /**
- * Build the executor. `commands` and `timeoutMs` are test seams — production
- * callers take the defaults, so the table always mirrors the allowlist.
+ * Build the executor. `commands`, `timeoutMs` and `appendAudit` are test
+ * seams — production callers take the defaults, so the table always mirrors
+ * the allowlist and every run is audited through appendAuditEntry.
  */
-export function createExecutor(config, { commands = defaultCommands(), timeoutMs = RUN_TIMEOUT_MS } = {}) {
+export function createExecutor(
+  config,
+  { commands = defaultCommands(), timeoutMs = RUN_TIMEOUT_MS, appendAudit = appendAuditEntry } = {}
+) {
   const tokens = new Map(); // token → { id, expiresAt }
   const jobs = new Map(); // runId → job (insertion order = start order)
   let running = null; // runId of the in-flight job, or null
@@ -138,6 +144,7 @@ export function createExecutor(config, { commands = defaultCommands(), timeoutMs
 
   /** The actual execution — runs detached from the HTTP request. */
   async function execute(job, argv) {
+    let finalStatus;
     try {
       const statusBefore = await gitCapture(config.REPO_ROOT, ['status', '--porcelain']);
       const t0 = Date.now();
@@ -185,20 +192,22 @@ export function createExecutor(config, { commands = defaultCommands(), timeoutMs
 
       job.exitCode = result.exitCode;
       job.durationMs = Date.now() - t0;
-      job.status = result.timedOut ? 'timeout' : result.exitCode === 0 ? 'ok' : 'failed';
+      finalStatus = result.timedOut ? 'timeout' : result.exitCode === 0 ? 'ok' : 'failed';
     } catch (err) {
       job.stderr += `\nexecutor error: ${err.message}`;
-      job.status = 'failed';
+      finalStatus = 'failed';
       job.durationMs = job.durationMs ?? 0;
     } finally {
-      job.finishedAt = new Date().toISOString();
-      running = null;
-      // Audit at completion — same line shape as the synchronous era.
+      // When the command finished — not when the audit line landed.
+      const finishedAt = new Date().toISOString();
+      // Audit first, same line shape as the synchronous era. The job stays
+      // `running` (and single-flight held) until the append has settled, so
+      // anyone who sees a finished run can read its audit line.
       try {
-        await appendAuditEntry(config, {
+        await appendAudit(config, {
           ts: job.ts,
           op: job.op,
-          status: job.status,
+          status: finalStatus,
           exitCode: job.exitCode,
           durationMs: job.durationMs,
           command: job.command,
@@ -211,6 +220,10 @@ export function createExecutor(config, { commands = defaultCommands(), timeoutMs
       } catch (err) {
         job.stderr += `\naudit append failed: ${err.message}`;
       }
+      // Publish the terminal state in one synchronous block — no await below.
+      job.status = finalStatus;
+      job.finishedAt = finishedAt;
+      running = null;
       emit(job, { type: 'done', snapshot: snapshot(job) });
       job.listeners.clear();
       pruneJobs();
