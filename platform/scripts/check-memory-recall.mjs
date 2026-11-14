@@ -63,7 +63,9 @@ class NoGroundtruth extends Error {}
 function runReference(question, includeHistory) {
   const args = [referenceScript, '--root', repoRoot, '--top', '100000'];
   if (includeHistory) args.push('--include-history');
-  args.push(question);
+  // `--` ends the options: a derived title such as `-x` would otherwise be read by
+  // argparse as an option and fail the run as "no groundtruth".
+  args.push('--', question);
   return new Promise((resolve, reject) => {
     const child = spawn('python3', args, { cwd: repoRoot, stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
