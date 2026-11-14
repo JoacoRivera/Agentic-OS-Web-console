@@ -84,7 +84,10 @@ test('the wiki lint splits into a guided Skill card and an executable determinis
   assert.equal(exec.type, 'executable');
   assert.equal(exec.skill, null);
   assert.equal(exec.commandPreview, 'npm run check:wiki-structure');
-  assert.match(exec.description, /python3 scripts\/wiki-lint\.py/);
+  // The interpreter shown is the one that runs: the repo's .venv python when
+  // present, else python3 (scripts/check-wiki-structure.mjs resolveLintCommand).
+  assert.match(exec.description, /scripts\/wiki-lint\.py in REPO_ROOT/);
+  assert.match(exec.description, /\.venv python if present, else python3/);
 });
 
 test('POST dry-run of check:wiki-structure shows its fixed npm command', async () => {
