@@ -18,6 +18,11 @@ export default function ReviewQueue({ metrics }) {
         <span className="run-name" title={d.reason ? `${d.path} — on hold: ${d.reason}` : d.path}>
           {d.name}
         </span>
+        {d.origin === 'bridge' && (
+          <span className="chip" title="Written by the Memory Bridge's automatic capture — no user confirmed the result (memory repo ADR-0003)">
+            Memory Bridge
+          </span>
+        )}
         <span className="run-path">{d.path}</span>
       </div>
     ));

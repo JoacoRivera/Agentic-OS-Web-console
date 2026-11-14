@@ -49,6 +49,18 @@ describe('ReviewQueue (ingest queue)', () => {
     expect(screen.getByText(/2 status mismatch\(es\).*1 hold-list warning/)).toBeInTheDocument();
     expect(screen.getByText('/aos-reconcile')).toBeInTheDocument();
   });
+
+  test('a Memory Bridge Draft carries an origin chip; other Drafts do not', () => {
+    const drafts = [
+      { name: 'cap-b', path: 'raw/p/examples/cap-b.md', mtime: '2026-11-12T10:00:00Z', origin: 'bridge' },
+      { name: 'cap-o', path: 'raw/p/examples/cap-o.md', mtime: '2026-11-11T10:00:00Z', origin: 'other' },
+    ];
+    render(<ReviewQueue metrics={metrics({ draftN: 2, drafts, heldN: 0, held: [] })} />);
+    const chips = screen.getAllByText('Memory Bridge');
+    expect(chips).toHaveLength(1);
+    expect(chips[0].closest('.run')).toHaveTextContent('cap-b');
+    expect(chips[0]).toHaveAttribute('title', expect.stringMatching(/no user confirmed/));
+  });
 });
 
 describe('HealthPanel (maintenance pass)', () => {
