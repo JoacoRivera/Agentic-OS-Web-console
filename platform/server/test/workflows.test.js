@@ -86,6 +86,11 @@ before(async () => {
   await write('wiki/workflows/no-updated-plain.md', FM(null, '', null) + '# No Updated Plain\n\nBody.\n');
   // Quoted and commented values read as the date they spell.
   await write('wiki/workflows/quoted.md', FM('policy', '', '"2026-11-02"') + '# Quoted\n\nBody.\n');
+  // A due review-by date (wiki-lint check 25) is informational only.
+  await write(
+    'wiki/workflows/review-due.md',
+    FM('policy') + '# Review Due\n\nA lesson to confirm. `review-by: 2026-01-31`\nLater: review-by: 2027-05-07\n'
+  );
   await write('wiki/workflows/commented.md', FM('policy', '', '2026-11-03 # reviewed') + '# Commented\n\nBody.\n');
   // "Verification: not applicable" is a satisfying decision, never flagged.
   await write(
@@ -131,6 +136,7 @@ before(async () => {
     'no-updated-plain',
     'quoted',
     'commented',
+    'review-due',
     'na-runbook',
     'exempt-runbook',
     'badkind',
@@ -359,4 +365,18 @@ test('statuses do not change when every file mtime is touched (a fresh checkout)
     const old = new Date(NOW.getTime() - 200 * DAY_MS);
     await fs.utimes(path.join(root, 'wiki/workflows/old-mtime.md'), old, old);
   }
+});
+
+test('a due review-by date fails the informational check and leaves the status alone', async () => {
+  const rows = byPath(await list());
+  const row = rows['wiki/workflows/review-due.md'];
+  assert.equal(row.status, 'ok');
+  const check = row.checks.find((c) => c.id === 'review-by');
+  assert.equal(check.category, 'informational');
+  assert.equal(check.status, 'fail');
+  // Lines count from the file's first line, frontmatter included (as lint does).
+  assert.equal(check.detail, 'line 9: 2026-01-31 is due');
+  assert.equal(check.fixHint, undefined);
+  // A page with no review-by token, or only a future one, passes.
+  assert.equal(rows['wiki/workflows/good-runbook.md'].checks.find((c) => c.id === 'review-by').status, 'pass');
 });

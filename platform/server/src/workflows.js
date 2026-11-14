@@ -4,6 +4,7 @@ import matter from 'gray-matter';
 import { safeResolve } from './paths.js';
 import { hrefResolvesTo, MD_LINK_RE, WIKILINK_RE } from './docs.js';
 import { calendarDay, daysBetween, localIsoDay } from './dates.js';
+import { scanReviewBy } from './reviewBy.js';
 
 /**
  * Workflow registry (ADR-0006/0007): status is driven by objective defects
@@ -278,6 +279,18 @@ function evaluateWorkflow(config, ctx, relPath, text, now) {
     ctx.usageText !== null && textLinksTo(ctx.usageText, 'wiki', relPath)
   );
   informational('has-examples', 'Has an examples/ folder', ctx.exampleDirs.has(`${baseDir}/examples`));
+  // wiki-lint check 25 on this page alone: a due or malformed `review-by:`
+  // date is worth seeing, but it is informational — never a status input.
+  const reviewBy = scanReviewBy(text, localIsoDay(now)).filter((hit) => hit.state !== 'pending');
+  informational(
+    'review-by',
+    'No review-by date is due',
+    reviewBy.length === 0,
+    reviewBy
+      .slice(0, 3)
+      .map((hit) => `line ${hit.line}: ${hit.date} ${hit.state === 'due' ? 'is due' : 'is malformed (want YYYY-MM-DD)'}`)
+      .join(' · ')
+  );
 
   // ---- status roll-up: first match wins (ADR-0006/0007) ----
   const failed = (id) => checks.find((c) => c.id === id)?.status === 'fail';
