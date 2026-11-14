@@ -32,6 +32,15 @@ mirrors the memory repo's capture inventory exactly; it never classifies differe
 _Avoid_: approved/unapproved, triage, review queue, risk class (all retired), treating a
 legacy `Approved` capture as different from an Ingested one
 
+**Capture origin**:
+A read-only attribute of a capture, never a state: **`bridge`** when a line of the capture
+starts with the unqualified `Source:` marker and names `Agentic OS Memory Bridge automatic
+capture` (the memory repo's `_BRIDGE_SOURCE`, its ADR-0003 — a capture no user confirmed),
+otherwise **`other`**. Origin never changes Draft / on hold / Ingested; the console uses it
+so the maintenance pass can skim Memory Bridge captures apart (`captures.bridge`,
+`health.sincePass`). Only the enum is exposed, never the `Source:` line text.
+_Avoid_: unapproved capture, bridge queue, treating `other` as user-approved
+
 **Ingest queue**:
 The Draft captures not yet ingested and not on hold (`draftN`, `drafts[]`). It drains when
 `/aos-ingest` flips `Status: Draft` to `Status: Ingested`, normally in the same session the
