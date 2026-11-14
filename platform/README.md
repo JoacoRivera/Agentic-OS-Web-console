@@ -24,6 +24,7 @@ yet) — see ADR-0005.
 | `npm run check:skills` | Skill registry vs an independent recount, including exact `frontmatter.name` = directory conformance |
 | `npm run check:metrics-groundtruth` | `/api/metrics` vs an independent recount of the active filesystem roots (permanent check, ADR-0002) |
 | `npm run check:family-health` | Family Health record parses and stays confined to its own root; prints counts only; skips when `HEALTH_REPO_ROOT` is unset. **Not** in the executable allowlist (ADR-0010) |
+| `npm run check:memory-stats-parity` | `/api/metrics.flow` vs the memory repo's `scripts/memory-stats.py --format json` (run with `--today` = the API's day); terminal-only, runs memory-repo Python, so **not** in the executable allowlist, the Operations catalog or `verify` (ADR-0001). Skips when the script or `python3` is absent |
 
 ## Test strategy
 
@@ -85,7 +86,10 @@ knowledge-intake `series` keyed on explicit `source_id` + `knowledge_intake_date
 origins, with `promoted_from` pages resolving to those origins instead of counting
 again (ADR-0003); a 7-day `week` by mtime (`weekTotal`, `activeDays`); `recent`; `health`
 from the newest `lint | maintenance pass` entry across `wiki/log.md` and its archive (due at
-7+ days, `overdue` at 10+, plus `ingestedSincePass`); `trend`.
+7+ days, `overdue` at 10+, plus `ingestedSincePass`); `flow` — memory-flow stats mirroring
+the memory repo's `scripts/memory-stats.py` (`server/src/flow.js`, ADR-0003 amendment
+2026-11-14): capture → ingest latency, maintenance-pass gaps, Ingest queue / on-hold ages and
+monthly counts, counts and dates only, absent figures as `null`; `trend`.
 
 Lineage fields live in YAML frontmatter. Intake origins declare `source_id` and a bare,
 unquoted `knowledge_intake_date: YYYY-MM-DD`; timestamps, quoted dates, comments, invalid
