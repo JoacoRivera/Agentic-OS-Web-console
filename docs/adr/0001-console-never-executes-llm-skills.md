@@ -45,14 +45,15 @@ or the other rows.
 
 | Allowlist id | What it runs (fixed, no arguments) | Status |
 |---|---|---|
-| `check:wiki-structure` | the memory repo's `scripts/wiki-lint.py` — the deterministic half of `/aos-wiki-lint` that this ADR already anticipated | Accepted 2026-11-14 |
+| `check:wiki-structure` | the memory repo's `scripts/wiki-lint.py` — the deterministic half of `/aos-wiki-lint` that this ADR already anticipated; interpreter: `<REPO_ROOT>/.venv/bin/python` when present, else `python3` from `PATH` | Accepted 2026-11-14 |
 
 This is the first entry whose code lives in `REPO_ROOT` rather than in this
 repository. The rules that make that acceptable apply to **every** row of the table:
 
 1. **Fixed command.** The script path and interpreter are fixed server-side. Nothing from
    the browser reaches the command line and no argument is ever passed (for the lint: no
-   `--root`, no `--today`).
+   `--root`, no `--today`; interpreter: `<REPO_ROOT>/.venv/bin/python` when present, else
+   `python3` from `PATH`).
 2. **Minimal environment.** The child gets a fixed, minimal environment. No console
    secret (`FIREFLY_TOKEN`, `PROXY_SECRET`, auth configuration) is visible to code that
    lives outside this repository.

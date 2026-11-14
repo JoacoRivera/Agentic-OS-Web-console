@@ -237,7 +237,7 @@ const EXECUTABLE_OPERATIONS = [
     id: 'check:wiki-structure',
     title: 'Wiki structure check',
     description:
-      'Run the memory repo\'s deterministic wiki lint (scripts/wiki-lint.py in REPO_ROOT with the repo\'s .venv python if present, else python3; no arguments, minimal environment) — the deterministic half of /aos-wiki-lint; its judgment checks stay in Claude.',
+      'Run the memory repo\'s deterministic wiki lint (scripts/wiki-lint.py in REPO_ROOT; interpreter: <REPO_ROOT>/.venv/bin/python when present, else python3 from PATH; no arguments, minimal environment) — the deterministic half of /aos-wiki-lint; its judgment checks stay in Claude.',
     commandPreview: 'npm run check:wiki-structure',
   },
 ];
