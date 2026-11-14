@@ -24,6 +24,7 @@ yet) — see ADR-0005.
 | `npm run check:skills` | Skill registry vs an independent recount, including exact `frontmatter.name` = directory conformance |
 | `npm run check:metrics-groundtruth` | `/api/metrics` vs an independent recount of the active filesystem roots (permanent check, ADR-0002) |
 | `npm run check:family-health` | Family Health record parses and stays confined to its own root; prints counts only; skips when `HEALTH_REPO_ROOT` is unset. **Not** in the executable allowlist (ADR-0010) |
+| `npm run check:session-status` | Session Status lines vs the memory repo's own `scripts/aos_status.py` on the live `REPO_ROOT`; skips when `python3` or the script is missing. Terminal-only: **not** in the executable allowlist and not in CI (it runs memory-repo Python) |
 
 ## Test strategy
 
@@ -100,6 +101,45 @@ content), and always summing to `unlineagedN + invalidN`. The chart states
 `Lineage incomplete` whenever
 `unlineagedN + invalidN > 0`, otherwise `Lineage complete`. See ADR-0003 for the stable
 reason codes, complete contract, and examples.
+
+## Session Status (`GET /api/session-status`)
+
+The Session Status section answers what the memory repo's `scripts/aos_status.py` prints at
+session start, computed live by the same rules (invariant 8; `server/src/sessionStatus.js`):
+
+- **Maintenance pass** — the newest `lint | maintenance pass` entry (other `lint` entries do
+  not reset it): ok, DUE at 7+ days or with no pass, OVERDUE at 10+; no `wiki/log.md` is
+  reported as unknown, not as due. Same functions as `/api/metrics` (`captures.js`).
+- **Captures** — Draft count with the **oldest age** (`knowledge_intake_date` when it is a
+  real ISO day, else the `YYYY-MM-DD.md` file-name suffix; never mtime or Git), captures
+  ingested since the last pass, and the Drafts on hold with their reasons.
+- **Git** — branch (`null` = detached HEAD), upstream, ahead/behind *as of the last fetch*,
+  and the dirty-file **count** (no names, no diffs).
+- **Setup** — the pre-commit githook (`core.hooksPath` = `scripts/githooks`) and this host's
+  `### <hostname>` row in `wiki/agentic-os-locations.md`. Two checks are **not ported** and
+  are reported `not-checked` with the command that does check them — never as ok: the Python
+  lint deps (a fact about the Python environment) and `sync-skills.py --check --global` (it
+  reads `skills/`, `plugins/` and locations under `$HOME`, outside the allowed roots). The
+  memory-stats line the script adds while the pass is due is not shown yet.
+
+Every block fails on its own (`unknown`/`unavailable` with a reason), never as a 500 for the
+whole payload and never as a zero. `lines` carries the script's text for the maintenance,
+captures, on-hold and git lines byte for byte — the surface `check:session-status` compares
+(run it after any change to `aos_status.py`, `wiki_log.py` or `aos_wiki/inventory.py`).
+
+**The git subprocess (ADR-0005).** This is the console's only subprocess on a GET path, and it
+is bounded: **fixed argv** (the frozen `GIT_QUERIES`; the route takes no input, so nothing from
+a request reaches git; `spawn` with `shell: false`); **read-only** queries only (`rev-parse`,
+`symbolic-ref`, `status --porcelain`, `rev-list --count`, `config --get`) — it **never fetches**,
+pulls, pushes or writes; `--no-optional-locks` + `GIT_OPTIONAL_LOCKS=0` so `git status` does not
+refresh `.git/index`, `-c core.fsmonitor=false` so no repo-configured fsmonitor hook runs,
+`GIT_TERMINAL_PROMPT=0`, and repo-locating variables (`GIT_DIR`, `GIT_WORK_TREE`, …) scrubbed so
+`REPO_ROOT` alone decides the clone; a **shared 1600 ms timeout** (the script's budget), past
+which the call is SIGKILLed and the block reports `timeout`. Concurrent requests share one
+computation. Only branch name, upstream name, three integers and the githook boolean leave the
+server; the route sits behind the same Host/Origin guard as every `/api` route. Through the
+proxy it describes the clone and hostname of the **console host**, not the browsing device. The
+view fetches on mount and on manual refresh only — not on the metrics poll.
 
 ## Memory query (`GET /api/memory/query?topic=`)
 
