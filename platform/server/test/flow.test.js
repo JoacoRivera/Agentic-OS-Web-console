@@ -14,6 +14,9 @@ import { createConfig } from '../src/config.js';
 
 const UUID = '0f3c2a1e-5b6d-4e7f-8a9b-0c1d2e3f4a5b';
 const TODAY = '2026-11-14';
+const NEL = String.fromCharCode(0x85);
+const FS = String.fromCharCode(0x1c);
+const BOM = String.fromCharCode(0xfeff);
 const fm = (lines) => `---\n${lines.join('\n')}\n---\n# capture\n\nStatus: Draft\n`;
 
 test('captureIntakeDay mirrors memory-stats.py intake_date()', () => {
@@ -39,6 +42,14 @@ test('captureIntakeDay mirrors memory-stats.py intake_date()', () => {
     ['no conflict/promotion rule: promoted_from is ignored', fm([`source_id: ${UUID}`, 'knowledge_intake_date: 2026-11-01', 'promoted_from: raw/x.md']), '2026-11-01'],
     ['invalid YAML elsewhere does not matter', fm([`source_id: ${UUID}`, 'knowledge_intake_date: 2026-11-01', 'tags: [unclosed']), '2026-11-01'],
     ['empty text', '', null],
+    // Python's `\s` is str.isspace(): \x85 and \x1c are spaces, U+FEFF is not.
+    ['NEL between key and colon', fm([`source_id${NEL}: ${UUID}`, 'knowledge_intake_date: 2026-10-04']), '2026-10-04'],
+    ['\\x1c between colon and value', fm([`source_id: ${UUID}`, `knowledge_intake_date:${FS}2026-10-04`]), '2026-10-04'],
+    ['trailing BOM is part of the token', fm([`source_id: ${UUID}${BOM}`, 'knowledge_intake_date: 2026-10-04']), null],
+    // date.fromisoformat: years 0001-9999.
+    ['year 0099', fm([`source_id: ${UUID}`, 'knowledge_intake_date: 0099-03-04']), '0099-03-04'],
+    ['year 0000', fm([`source_id: ${UUID}`, 'knowledge_intake_date: 0000-03-04']), null],
+    ['2100 is not a leap year', fm([`source_id: ${UUID}`, 'knowledge_intake_date: 2100-02-29']), null],
   ];
   for (const [label, text, expected] of rows) {
     assert.equal(captureIntakeDay(text, TODAY), expected, label);
@@ -186,6 +197,17 @@ test('queue: counts, unlineaged, ages from intake to today', () => {
     unlineaged: 1,
     ages: { n: 0, min: null, median: null, p90: null, max: null },
   });
+});
+
+test('day arithmetic stays exact for years 0001-0099', () => {
+  const f = flowFor({
+    draft: [['raw/p/examples/old.md', lineaged('0099-02-24', 1)]],
+    entries: [entry('0099-03-01', 'lint', 'maintenance pass'), entry('0099-02-20', 'lint', 'maintenance pass')],
+    today: '0099-03-06',
+  });
+  assert.equal(f.queue.draft.ages.max, 10);
+  assert.deepEqual(f.passes.longestGap, { from: '0099-02-20', to: '0099-03-01', days: 9 });
+  assert.equal(f.passes.openGapDays, 5);
 });
 
 test('months: ascending, ingest-only months present, unlineaged in no month, other ops not counted', () => {

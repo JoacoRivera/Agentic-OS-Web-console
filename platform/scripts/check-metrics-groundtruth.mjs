@@ -286,7 +286,16 @@ function capturesRecount(rawAll, wikiAll) {
 // `knowledge_intake_date:` line, quotes stripped, a lowercase canonical UUID,
 // a real non-future day), and figures are rebuilt from sorted value lists.
 
-const isSpace = (ch) => /\s/.test(ch);
+// Python's `\s` on str is `str.isspace()` — not JS's `\s` (which adds U+FEFF
+// and lacks \x1c-\x1f and \x85). Listed by code point.
+const PY_SPACE = new Set([
+  0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x85, 0xa0, 0x1680,
+  0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a,
+  0x2028, 0x2029, 0x202f, 0x205f, 0x3000,
+]);
+const isSpace = (ch) => PY_SPACE.has(ch.codePointAt(0));
+// `date.fromisoformat` rejects year 0, which a JS ISO round trip accepts.
+const isPyDay = (day) => !day.startsWith('0000') && isRealDay(day);
 const HEX = '0123456789abcdef';
 
 /** First non-space token after `key\s*:\s*` at a line start of `block`, or null. */
@@ -343,7 +352,7 @@ function flowIntakeDay(text, today) {
   const day = unquote(intake);
   const shaped = day.length === 10 && day[4] === '-' && day[7] === '-'
     && [...day].every((ch, i) => i === 4 || i === 7 || (ch >= '0' && ch <= '9'));
-  if (!shaped || !isRealDay(day)) return null;
+  if (!shaped || !isPyDay(day)) return null;
   return day <= today ? day : null;
 }
 
@@ -360,7 +369,7 @@ function summary(values) {
 
 function flowRecount(capturePaths) {
   const today = todayLocal();
-  const dated = logEntriesRecount().filter((e) => isRealDay(e.date));
+  const dated = logEntriesRecount().filter((e) => isPyDay(e.date));
   const ingestDates = new Map(); // path -> every dated ingest day naming it
   for (const e of dated) {
     if (e.op !== 'ingest') continue;
@@ -830,14 +839,14 @@ try {
   check('health.overdue', console_.health.overdue, truth.overdue);
   check('health.ingestedSincePass', console_.health.ingestedSincePass, truth.ingestedSincePass);
 
-  // Memory-flow stats (memory-stats.py), block by block, plus two consistencies.
+  // Memory-flow stats (memory-stats.py), block by block, plus one consistency.
+  // No `openGapDays = health.passAge` check: health takes the first pass in log
+  // order (wiki_log), flow the newest pass date (memory-stats.py); they differ
+  // on an out-of-order log, and each is already checked against its own recount.
   for (const key of ['today', 'captures', 'months', 'latency', 'passes', 'queue']) {
     check(`flow.${key}`, console_.flow?.[key], truth.flow[key]);
   }
   check('flow.captures.total = capN', console_.flow?.captures?.total, console_.capN);
-  if (console_.flow?.passes?.openGapDays != null && console_.health.passAge !== null) {
-    check('flow.passes.openGapDays = health.passAge', console_.flow.passes.openGapDays, console_.health.passAge);
-  }
 
   // The whole 30-point curve, not just its endpoint: a wrong intake *date*
   // moves points without moving the total.

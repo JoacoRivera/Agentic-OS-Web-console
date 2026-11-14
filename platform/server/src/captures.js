@@ -56,7 +56,7 @@ export function isLogFile(relPath) {
 }
 
 /** A real ISO calendar day (what `date.fromisoformat` accepts for this shape). */
-export function validDay(text) {
+function validDay(text) {
   const [y, m, d] = text.split('-').map(Number);
   const parsed = new Date(Date.UTC(y, m - 1, d));
   return parsed.getUTCFullYear() === y && parsed.getUTCMonth() === m - 1 && parsed.getUTCDate() === d;
