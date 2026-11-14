@@ -9,6 +9,10 @@
  *   (live since 2026-07-04): dry-run first, explicit confirm, single-flight,
  *   audited — see executor.js for the safety model.
  *
+ * `check:wiki-structure` (ADR-0001 amendment, 2026-11-14) is the one entry
+ * whose code lives in REPO_ROOT: its npm wrapper runs the memory repo's
+ * `scripts/wiki-lint.py` with a fixed argv and a minimal environment.
+ *
  * The historical `check:hud-parity` migration gate was retired on
  * 2026-07-04 (ADR-0002 amendment); the `migrationOnly` escape hatch remains
  * for any future migration gate.
@@ -28,6 +32,7 @@ export const EXECUTABLE_ALLOWLIST = [
   'check:workflows',
   'check:skills',
   'check:metrics-groundtruth',
+  'check:wiki-structure',
 ];
 
 // Guided cards track the memory repo's live contracts (AGENTS.md, the `aos-*`
@@ -227,6 +232,13 @@ const EXECUTABLE_OPERATIONS = [
     description:
       'Console metrics vs an independent recount of wiki/, raw/, and templates/ — the permanent correctness check.',
     commandPreview: 'npm run check:metrics-groundtruth',
+  },
+  {
+    id: 'check:wiki-structure',
+    title: 'Wiki structure check',
+    description:
+      'Run the memory repo\'s deterministic wiki lint (python3 scripts/wiki-lint.py in REPO_ROOT, no arguments, minimal environment) — the deterministic half of /aos-wiki-lint; its judgment checks stay in Claude.',
+    commandPreview: 'npm run check:wiki-structure',
   },
 ];
 
