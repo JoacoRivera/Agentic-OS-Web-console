@@ -16,7 +16,7 @@ function chipsFor(lastRun) {
 
 function RunSummary({ lastRun }) {
   if (!lastRun) {
-    return <div className="placeholder-body">No run on record. Dry-run, then confirm, to lint the wiki.</div>;
+    return <div className="placeholder-body">No run on record. Run the check, then confirm, to lint the wiki.</div>;
   }
   const { result } = lastRun;
   const seconds = typeof lastRun.durationMs === 'number' ? ` · ${(lastRun.durationMs / 1000).toFixed(1)}s` : '';

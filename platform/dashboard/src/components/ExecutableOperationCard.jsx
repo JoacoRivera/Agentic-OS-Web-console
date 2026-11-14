@@ -22,7 +22,8 @@ function abortableDelay(ms, signal) {
 /**
  * An executable operation (Phase 3, ADR-0001): one allowlisted deterministic
  * check behind the full safety flow — dry-run first (shows the fixed command
- * and issues a single-use confirm token), then an explicit confirm, then an
+ * and issues a single-use confirm token; the button reads "run check…"
+ * because nothing runs at that step), then an explicit confirm, then an
  * async run (202 + runId, roadmap §4.2) whose output streams live over SSE,
  * with changed files and git diff at completion. The id only selects a
  * server-side command-table row; nothing typed here reaches a shell.
@@ -198,8 +199,8 @@ export default function ExecutableOperationCard({ op, lastRun, onFinished }) {
 
       <div className="exec-actions">
         {!dry && !live && (
-          <button className="btn" onClick={doDryRun} disabled={busy}>
-            {busy ? 'working…' : 'dry-run'}
+          <button className="btn exec-run-btn" onClick={doDryRun} disabled={busy}>
+            {busy ? 'working…' : 'run check…'}
           </button>
         )}
         {error && <span className="exec-error">{error}</span>}
@@ -208,12 +209,12 @@ export default function ExecutableOperationCard({ op, lastRun, onFinished }) {
       {dry && (
         <div className="exec-confirm">
           <div className="exec-confirm-text">
-            Dry-run only — nothing was executed. Confirm to run{' '}
+            Nothing has run yet. Confirm to run{' '}
             <code>{dry.command}</code> in <code>{dry.cwd}</code>.
           </div>
           <div className="exec-actions">
             <button className="btn exec-run-btn" onClick={doRun} disabled={busy}>
-              {busy ? 'starting…' : 'confirm & run'}
+              {busy ? 'starting…' : 'confirm'}
             </button>
             <button className="btn" onClick={() => setDry(null)} disabled={busy}>
               cancel

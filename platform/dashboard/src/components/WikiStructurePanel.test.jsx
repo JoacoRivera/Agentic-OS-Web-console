@@ -40,7 +40,7 @@ describe('WikiStructurePanel', () => {
     expect(await screen.findByText('never run')).toBeInTheDocument();
     expect(screen.getByText(/no run on record/i)).toBeInTheDocument();
     expect(screen.getByText('Wiki structure check')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'dry-run' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'run check…' })).toBeInTheDocument();
     expect(screen.getByText(/only the/)).toHaveTextContent('lint | maintenance pass');
   });
 
@@ -154,8 +154,8 @@ describe('WikiStructurePanel', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     render(<WikiStructurePanel />);
-    await user.click(await screen.findByRole('button', { name: 'dry-run' }));
-    await user.click(await screen.findByRole('button', { name: /confirm & run/i }));
+    await user.click(await screen.findByRole('button', { name: 'run check…' }));
+    await user.click(await screen.findByRole('button', { name: 'confirm' }));
     await screen.findByText(/streaming · run run-1/);
 
     lastRun = run({ parsed: true, errors: 0, warnings: 0, findings: [], findingsTotal: 0, truncated: false, incomplete: false });

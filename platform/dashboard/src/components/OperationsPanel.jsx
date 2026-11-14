@@ -28,8 +28,9 @@ export default function OperationsPanel({ data, lastRuns = {}, onOpenDoc }) {
           Executable allowlist <span className="label-sub">{counts.executable} · Phase 3</span>
         </div>
         <div className="wf-summary">
-          Deterministic checks only — no LLM Skill is ever executable. Every run is dry-run
-          first, explicitly confirmed, one at a time, and appended to the audit log.
+          Deterministic checks only — no LLM Skill is ever executable. Every run is previewed
+          first (nothing executes), explicitly confirmed, one at a time, and appended to the
+          audit log.
         </div>
         {executable.map((op) => (
           <ExecutableOperationCard key={op.id} op={op} lastRun={lastRuns[op.id]} />

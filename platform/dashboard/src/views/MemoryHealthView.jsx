@@ -5,14 +5,16 @@ import SincePassCaptures from '../components/SincePassCaptures.jsx';
 import WikiStructurePanel from '../components/WikiStructurePanel.jsx';
 
 /**
- * Maintenance section: the maintenance-pass cadence, the console self-check
- * card and the captures ingested since that pass, then memory-flow stats;
- * last, the last deterministic wiki structure check (rendered whether or not
- * metrics loaded — it reads its own endpoint).
+ * Maintenance section: first the last deterministic wiki structure check with
+ * its run card — step 1 of the maintenance pass, so it leads the view
+ * (rendered whether or not metrics loaded — it reads its own endpoint); then
+ * the maintenance-pass cadence, the console self-check card and the captures
+ * ingested since that pass, then memory-flow stats.
  */
 export default function MemoryHealthView({ metrics, metricsError }) {
   return (
     <>
+      <WikiStructurePanel />
       {metrics ? (
         <>
           <div className="grid-2">
@@ -30,7 +32,6 @@ export default function MemoryHealthView({ metrics, metricsError }) {
           </div>
         </div>
       )}
-      <WikiStructurePanel />
     </>
   );
 }

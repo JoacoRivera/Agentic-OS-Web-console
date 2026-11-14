@@ -50,8 +50,8 @@ afterEach(() => {
 async function dryRunAndConfirmPrompt(user, fetchMock) {
   vi.stubGlobal('fetch', fetchMock);
   const rendered = render(<ExecutableOperationCard op={op} />);
-  await user.click(screen.getByRole('button', { name: 'dry-run' }));
-  await screen.findByRole('button', { name: /confirm & run/i });
+  await user.click(screen.getByRole('button', { name: 'run check…' }));
+  await screen.findByRole('button', { name: 'confirm' });
   return rendered;
 }
 
@@ -69,8 +69,8 @@ describe('ExecutableOperationCard', () => {
     const { container } = render(<ExecutableOperationCard op={op} />);
     vi.stubGlobal('fetch', fetchMock);
 
-    await user.click(screen.getByRole('button', { name: 'dry-run' }));
-    await screen.findByRole('button', { name: /confirm & run/i });
+    await user.click(screen.getByRole('button', { name: 'run check…' }));
+    await screen.findByRole('button', { name: 'confirm' });
 
     expect(fetchMock).toHaveBeenCalledWith(DRY_RUN_URL, {
       method: 'POST',
@@ -97,8 +97,8 @@ describe('ExecutableOperationCard', () => {
 
     await user.click(screen.getByRole('button', { name: 'cancel' }));
 
-    expect(screen.queryByText(/dry-run only/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'dry-run' })).toBeInTheDocument();
+    expect(screen.queryByText(/nothing has run yet/i)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'run check…' })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
@@ -120,7 +120,7 @@ describe('ExecutableOperationCard', () => {
     });
     const { container } = await dryRunAndConfirmPrompt(user, fetchMock);
 
-    await user.click(screen.getByRole('button', { name: /confirm & run/i }));
+    await user.click(screen.getByRole('button', { name: 'confirm' }));
 
     expect(await screen.findByText(/streaming · run run-123/)).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(RUN_URL, {
@@ -186,7 +186,7 @@ describe('ExecutableOperationCard', () => {
       throw new Error(`Unexpected fetch: ${url}`);
     });
     const { unmount } = await dryRunAndConfirmPrompt(user, fetchMock);
-    await user.click(screen.getByRole('button', { name: /confirm & run/i }));
+    await user.click(screen.getByRole('button', { name: 'confirm' }));
     await screen.findByText(/streaming · run run-77/);
 
     const source = FakeEventSource.instances[0];
@@ -227,7 +227,7 @@ describe('ExecutableOperationCard', () => {
       throw new Error(`Unexpected fetch: ${url}`);
     });
     const { unmount } = await dryRunAndConfirmPrompt(user, fetchMock);
-    const confirm = user.click(screen.getByRole('button', { name: /confirm & run/i }));
+    const confirm = user.click(screen.getByRole('button', { name: 'confirm' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(RUN_URL, expect.anything()));
 
     unmount();
@@ -251,7 +251,7 @@ describe('ExecutableOperationCard', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
     const { unmount } = render(<ExecutableOperationCard op={op} />);
-    const click = user.click(screen.getByRole('button', { name: 'dry-run' }));
+    const click = user.click(screen.getByRole('button', { name: 'run check…' }));
     await waitFor(() => expect(fetchMock).toHaveBeenCalled());
 
     const signal = fetchMock.mock.calls[0][1].signal;
@@ -291,7 +291,7 @@ describe('ExecutableOperationCard', () => {
       throw new Error(`Unexpected fetch: ${url}`);
     });
     await dryRunAndConfirmPrompt(user, fetchMock);
-    await user.click(screen.getByRole('button', { name: /confirm & run/i }));
+    await user.click(screen.getByRole('button', { name: 'confirm' }));
     await screen.findByText(/streaming · run run-9/);
 
     const source = FakeEventSource.instances[0];
@@ -329,7 +329,7 @@ describe('ExecutableOperationCard', () => {
       throw new Error(`Unexpected fetch: ${url}`);
     });
     await dryRunAndConfirmPrompt(user, fetchMock);
-    await user.click(screen.getByRole('button', { name: /confirm & run/i }));
+    await user.click(screen.getByRole('button', { name: 'confirm' }));
     await screen.findByText(/streaming · run run-9/);
 
     const source = FakeEventSource.instances[0];
@@ -344,7 +344,7 @@ describe('ExecutableOperationCard', () => {
 
     expect(await screen.findByText(/run lost \(HTTP 404\)/i)).toBeInTheDocument();
     expect(screen.queryByText(/streaming/)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'dry-run' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'run check…' })).toBeInTheDocument();
   });
 
   test('cancels the polling fallback on unmount before it fetches a snapshot', async () => {
@@ -362,7 +362,7 @@ describe('ExecutableOperationCard', () => {
       throw new Error(`Unexpected fetch: ${url}`);
     });
     const { unmount } = await dryRunAndConfirmPrompt(user, fetchMock);
-    await user.click(screen.getByRole('button', { name: /confirm & run/i }));
+    await user.click(screen.getByRole('button', { name: 'confirm' }));
     await screen.findByText(/streaming · run run-9/);
 
     vi.useFakeTimers();
@@ -394,7 +394,7 @@ describe('ExecutableOperationCard', () => {
       throw new Error(`Unexpected fetch: ${url}`);
     });
     const { unmount } = await dryRunAndConfirmPrompt(user, fetchMock);
-    await user.click(screen.getByRole('button', { name: /confirm & run/i }));
+    await user.click(screen.getByRole('button', { name: 'confirm' }));
     await screen.findByText(/streaming · run run-9/);
 
     vi.useFakeTimers();
@@ -426,8 +426,8 @@ describe('ExecutableOperationCard', () => {
     vi.stubGlobal('fetch', fetchMock);
     const onFinished = vi.fn();
     render(<ExecutableOperationCard op={op} onFinished={onFinished} />);
-    await user.click(screen.getByRole('button', { name: 'dry-run' }));
-    await user.click(await screen.findByRole('button', { name: /confirm & run/i }));
+    await user.click(screen.getByRole('button', { name: 'run check…' }));
+    await user.click(await screen.findByRole('button', { name: 'confirm' }));
     await screen.findByText(/streaming · run run-5/);
     expect(onFinished).not.toHaveBeenCalled();
 
