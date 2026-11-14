@@ -267,5 +267,6 @@ _Avoid_: conflating with Platform Apps / the memory console
   skill-backed preview must resolve through the live Skill Registry and invoke the same
   `aos-*` identity; only the Hero command bar is exhaustive, because it derives directly
   from `/api/skills` (ADR-0009).
-- `/aos-wiki-lint` (LLM skill) is split from a future deterministic `check:wiki-structure`
-  Executable Operation — same intent, different runtime, different concept.
+- `/aos-wiki-lint` (LLM skill) is split from the deterministic `check:wiki-structure`
+  Executable Operation (shipped 2026-11-14, ADR-0001 amendment: it runs the memory repo's
+  `scripts/wiki-lint.py`) — same intent, different runtime, different concept.

@@ -41,7 +41,10 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
    LLM judgment and can only ever be **Guided Operations** (checklist + command preview). Do
    not shell out to headless Claude or pretend a Skill is an npm script. The Phase-3
    executable allowlist contains **only** deterministic checks (`npm run verify`,
-   `check:paths`, `check:docs`, `check:workflows`, `check:skills`, `check:metrics-groundtruth`).
+   `check:paths`, `check:docs`, `check:workflows`, `check:skills`, `check:metrics-groundtruth`,
+   `check:wiki-structure`). `check:wiki-structure` (ADR-0001 amendment, 2026-11-14) runs the
+   memory repo's `scripts/wiki-lint.py` with a fixed argv (no arguments) and a minimal child
+   environment (no console secret); the `/aos-wiki-lint` Skill stays Guided.
    `check:hud-parity` was a **temporary** migration gate and was retired on 2026-07-04
    (ADR-0002 amendment). The legacy files were removed on 2026-07-30; do not reintroduce
    that check or treat `dashboards/` as a docs, path-safety, or metrics root.

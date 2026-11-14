@@ -23,6 +23,7 @@ yet) — see ADR-0005.
 | `npm run check:workflows` | Registry inclusion + status roll-up vs an independent recount (ADR-0006/0007) |
 | `npm run check:skills` | Skill registry vs an independent recount, including exact `frontmatter.name` = directory conformance |
 | `npm run check:metrics-groundtruth` | `/api/metrics` vs an independent recount of the active filesystem roots (permanent check, ADR-0002) |
+| `npm run check:wiki-structure` | Runs the memory repo's deterministic `scripts/wiki-lint.py` in `REPO_ROOT` (fixed argv, minimal env, no bytecode writes). Exit 0 = no errors, 1 = errors, 2 = not a lintable root, 3 = wrapper failure (script missing / interpreter not spawnable). Needs `python3` with the memory repo's deps, or its `.venv/` (ADR-0001 amendment, 2026-11-14) |
 | `npm run check:family-health` | Family Health record parses and stays confined to its own root; prints counts only; skips when `HEALTH_REPO_ROOT` is unset. **Not** in the executable allowlist (ADR-0010) |
 
 ## Test strategy
@@ -239,10 +240,10 @@ one-card-per-Skill parity is required (ADR-0009).
 
 ## Controlled execution (Phase 3, `POST /api/operations/:id/{dry-run,run}`)
 
-Only the **permanent executable allowlist** runs — the six deterministic checks
+Only the **permanent executable allowlist** runs — the seven deterministic checks
 (`verify`, `check:paths`, `check:docs`, `check:workflows`, `check:skills`,
-`check:metrics-groundtruth`), each mapped to its fixed `npm run <id>` in a server-side
-command table. The client-supplied `:id` only selects a row; it is never interpolated,
+`check:metrics-groundtruth`, `check:wiki-structure`), each mapped to its fixed
+`npm run <id>` in a server-side command table. The client-supplied `:id` only selects a row; it is never interpolated,
 and `spawn()` runs with `shell: false`. The flow (`server/src/executor.js`):
 
 1. **Dry-run** describes the exact command/cwd and issues a **single-use confirm token**
@@ -260,6 +261,16 @@ and `spawn()` runs with `shell: false`. The flow (`server/src/executor.js`):
    Retention (Phase 4.3): size-based rollover (`AUDIT_ROTATE_BYTES`, default 1 MB, keeping
    `AUDIT_ROTATE_KEEP` rotated files, default 3); rotation renames whole files only and the
    reader spans rotated files, so the tail is loss-free across the boundary.
+
+**`check:wiki-structure`** (ADR-0001 amendment, 2026-11-14) is the only row whose code
+lives in `REPO_ROOT`: the wrapper runs `<REPO_ROOT>/scripts/wiki-lint.py` with
+`<REPO_ROOT>/.venv/bin/python` when that exists, else `python3`, no arguments, and an
+environment of only `PATH`/`HOME`/locale/`TZ` plus `PYTHONDONTWRITEBYTECODE=1` — no console
+secret reaches it. At completion the executor parses the report from the **full** stdout
+(`server/src/wikiLint.js`) and stores it as an additive `result` field on the snapshot and
+the audit line; `GET /api/maintenance/wiki-structure` returns the newest such entry, which
+the Maintenance view shows as a snapshot of that run (never live, never a cadence reset).
+An unparseable or failed run is `parsed: false` with a reason — never zeros.
 
 CI (Phase 4.1, `.github/workflows/ci.yml`) runs the repo-independent subset on push/PR:
 `npm ci`, `npm test`, `npm run check:paths`, `npm run build`. The live-repo checks stay
