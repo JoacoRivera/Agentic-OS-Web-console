@@ -1,0 +1,5 @@
+# Synthetic fixture holds: one raw/...md path per line, optional "# reason".
+raw/projects/examples/draft-on-hold.md  # parked: waiting on a synthetic decision
+raw/projects/examples/bridge-draft-on-hold.md  # parked: synthetic bridge capture on hold
+raw/projects/examples/no-such-capture.md  # names a file that does not exist (hold warning)
+raw/projects/examples/ingested-stale-hold.md  # names an already Ingested capture (stale hold)
