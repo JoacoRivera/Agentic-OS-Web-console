@@ -473,6 +473,7 @@ export async function computeMetrics(config, now = new Date()) {
   // Every wiki/ page lint scans (index/README included), the log excepted.
   // Accepted cost: this re-reads pages the lineage pass already read (~400 small files).
   const reviewBy = await collectReviewBy(repoRoot, byRoot.wiki.map((p) => p.path), now);
+
   // ---- captures ingested since that pass, by origin ----
   // Full counts in byOrigin; the list is capped, bridge rows first so the cap
   // drops `other` rows before any bridge row. Path/name/date/origin only.

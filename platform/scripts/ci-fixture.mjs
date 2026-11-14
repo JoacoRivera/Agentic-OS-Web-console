@@ -3,7 +3,8 @@
 // CI does. One command reproduces the CI step locally.
 //
 // Not a `check:*` script and not on the executable allowlist (ADR-0001): it is
-// a CI harness around the allowlisted checks, never an Operation.
+// a CI harness around deterministic JS-only checks (the allowlisted ones plus
+// `check:evals`, which is not allowlisted), never an Operation.
 //
 // Each child runs with `process.execPath` directly — no `--env-file`, so a
 // developer's platform/.env cannot leak in — and with every optional external
