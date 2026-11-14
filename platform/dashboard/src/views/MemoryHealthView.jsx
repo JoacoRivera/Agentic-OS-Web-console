@@ -1,7 +1,8 @@
 import HealthPanel from '../components/HealthPanel.jsx';
+import MemoryFlow from '../components/MemoryFlow.jsx';
 import RepoHealth from '../components/RepoHealth.jsx';
 
-/** Maintenance section: the maintenance-pass cadence + the console self-check card. */
+/** Maintenance section: the maintenance-pass cadence, the console self-check card, and memory-flow stats. */
 export default function MemoryHealthView({ metrics, metricsError }) {
   if (!metrics) {
     return (
@@ -14,9 +15,12 @@ export default function MemoryHealthView({ metrics, metricsError }) {
     );
   }
   return (
-    <div className="grid-2">
-      <HealthPanel metrics={metrics} />
-      <RepoHealth metrics={metrics} />
-    </div>
+    <>
+      <div className="grid-2">
+        <HealthPanel metrics={metrics} />
+        <RepoHealth metrics={metrics} />
+      </div>
+      <MemoryFlow metrics={metrics} />
+    </>
   );
 }
