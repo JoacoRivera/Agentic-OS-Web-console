@@ -43,6 +43,8 @@ import { listWorkflows, STATUS_LABELS, WORKFLOW_KINDS } from '../src/workflows.j
  *             Knowledge intake series)
  *   workflow  { kind, status } for wiki/workflows rows; status 'excluded' for
  *             examples/cases/results data
+ *   reviewBy  inline `review-by:` tokens on the page (wiki-lint check 25) as
+ *             [line, date, state] at FIXED_NOW
  */
 
 const FIXTURE = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures', 'memory-repo');
@@ -113,6 +115,19 @@ const CASES = {
   'wiki/workflows/not-indexed.md': wf('reference', 'missing-links'),
   'wiki/workflows/runbook-todo.md': wf('runbook', 'needs-review'),
   'wiki/workflows/runbook-ok/examples/sample.md': wf(null, 'excluded'),
+  // Staleness from frontmatter `updated:`, never mtime (i06, ADR-0006 amendment).
+  'wiki/workflows/stale-by-updated.md': wf('reference', 'stale'),
+  'wiki/workflows/updated-missing.md': wf('reference', 'needs-review'),
+  'wiki/workflows/updated-impossible.md': wf('reference', 'needs-review'),
+  // Inline review-by tokens (i06); the bare prose mention on line 13 is ignored.
+  'wiki/review-by-dates.md': {
+    lineage: 'missing-lineage',
+    reviewBy: [
+      [9, '2099-01-01', 'pending'],
+      [10, '2026-01-05', 'due'],
+      [11, 'soon', 'malformed'],
+    ],
+  },
 };
 
 // Hand-derived from the fixture's non-file inputs.
@@ -133,6 +148,8 @@ const where = (pred) => rows.filter(pred).map((r) => r.path).sort();
 const count = (pred) => rows.filter(pred).length;
 const config = createConfig({ REPO_ROOT: FIXTURE });
 const holdWarnings = () => MISSING_HOLDS + count((r) => r.staleHold);
+const tokens = () =>
+  rows.flatMap((r) => (r.reviewBy ?? []).map(([line, date, state]) => ({ path: r.path, line, date, state })));
 
 /** Local calendar day `offset` days from `date`, as YYYY-MM-DD. */
 function localDay(date, offset = 0) {
@@ -212,13 +229,14 @@ test('fixture: minimum coverage of every case the CI checks rely on', async () =
   for (const kind of Object.keys(WORKFLOW_KINDS)) {
     assert.ok(count((r) => r.workflow?.kind === kind) > 0, `no ${kind} workflow`);
   }
-  // `stale` joins this list when staleness reads `updated:` (i06); with mtime
-  // a fresh checkout cannot be stale.
-  for (const status of ['ok', 'unclassified', 'missing-links', 'needs-review']) {
+  for (const status of ['ok', 'unclassified', 'missing-links', 'needs-review', 'stale']) {
     assert.ok(status in STATUS_LABELS);
     assert.ok(count((r) => r.workflow?.status === status) > 0, `no ${status} workflow`);
   }
   assert.ok(count((r) => r.workflow?.status === 'excluded') > 0, 'no excluded examples/ data');
+  for (const state of ['pending', 'due', 'malformed']) {
+    assert.ok(tokens().some((t) => t.state === state), `no ${state} review-by token`);
+  }
   const window = [localDay(FIXED_NOW, -29), localDay(FIXED_NOW)];
   assert.ok(count((r) => r.lineage === 'origin' && r.intake >= window[0]) > 0, 'no intake inside the 30-day window');
   assert.ok(count((r) => r.lineage === 'origin' && r.intake < window[0]) > 0, 'no intake before the 30-day window');
@@ -323,6 +341,19 @@ test('fixture: metrics at FIXED_NOW equal the totals tallied from the table', as
     rows.filter((r) => r.sincePass).map((r) => [r.path, r.origin]).sort()
   );
   assert.equal(m.health.sincePass.truncated, false);
+
+  // review-by (wiki-lint check 25): counters, earliest pending, due then malformed.
+  const t = tokens();
+  const stateRank = { due: 0, malformed: 1 };
+  assert.deepEqual(m.health.reviewBy, {
+    dueN: t.filter((x) => x.state === 'due').length,
+    malformedN: t.filter((x) => x.state === 'malformed').length,
+    pendingN: t.filter((x) => x.state === 'pending').length,
+    nextDue: t.filter((x) => x.state === 'pending').map((x) => x.date).sort()[0] ?? null,
+    items: t
+      .filter((x) => x.state !== 'pending')
+      .sort((a, b) => stateRank[a.state] - stateRank[b.state] || (a.date < b.date ? -1 : 1)),
+  });
 
   const problems = pages
     .filter((r) => r.lineage === 'missing-lineage' || r.lineage === 'future-intake-date')
