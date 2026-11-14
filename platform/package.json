@@ -18,6 +18,7 @@
     "check:workflows": "node --env-file-if-exists=.env scripts/check-workflows.mjs",
     "check:skills": "node --env-file-if-exists=.env scripts/check-skills.mjs",
     "check:metrics-groundtruth": "node --env-file-if-exists=.env scripts/check-metrics-groundtruth.mjs",
+    "check:wiki-structure": "node --env-file-if-exists=.env scripts/check-wiki-structure.mjs",
     "check:family-health": "node --env-file-if-exists=.env scripts/check-family-health.mjs"
   },
   "dependencies": {
