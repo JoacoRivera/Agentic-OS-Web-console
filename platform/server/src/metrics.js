@@ -10,6 +10,7 @@ import {
   lastMaintenancePass,
   readLogEntries,
 } from './captures.js';
+import { calendarDay } from './dates.js';
 
 /**
  * Canonical memory metrics (ADR-0002): a live filesystem scan. Scalar file
@@ -91,18 +92,6 @@ const isoDay = (ms) => {
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 };
-
-/** A real `YYYY-MM-DD` calendar day, or null (rejects Feb 30, month 13, …). */
-function calendarDay(day) {
-  if (typeof day !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return null;
-  const [year, month, date] = day.split('-').map(Number);
-  const parsed = new Date(Date.UTC(year, month - 1, date));
-  return parsed.getUTCFullYear() === year
-    && parsed.getUTCMonth() === month - 1
-    && parsed.getUTCDate() === date
-    ? day
-    : null;
-}
 
 /**
  * The exact frontmatter source text of the top-level
