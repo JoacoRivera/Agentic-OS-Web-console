@@ -4,7 +4,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createConfig } from '../src/config.js';
-import { classifyCaptures, readLogEntries } from '../src/captures.js';
+import {
+  classifyCaptures,
+  isMaintenancePass,
+  lastMaintenancePass,
+  readHolds,
+  readLogEntries,
+} from '../src/captures.js';
 import { computeMetrics } from '../src/metrics.js';
 import { listOperations } from '../src/operations.js';
 import { listSkills } from '../src/skills.js';
@@ -29,7 +35,10 @@ import { listWorkflows, STATUS_LABELS, WORKFLOW_KINDS } from '../src/workflows.j
  *   legacy    `Status: Approved` (Ingested, legacy spelling)
  *   mismatch  the classifier's mismatch code
  *   sincePass first ingest log entry sits above the newest maintenance pass
+ *   staleHold Ingested, yet still named in scripts/capture-holds.txt
  *   lineage   'origin' | 'promoted' | 'missing-lineage' | 'future-intake-date'
+ *   intake    the file's `knowledge_intake_date` (origin rows; drives the
+ *             Knowledge intake series)
  *   workflow  { kind, status } for wiki/workflows rows; status 'excluded' for
  *             examples/cases/results data
  */
@@ -44,26 +53,39 @@ const wf = (kind, status) => ({ lineage: 'missing-lineage', workflow: { kind, st
 const CASES = {
   // ---- raw/ ----
   'raw/README.md': NOT_A_PAGE,
-  'raw/projects/examples/draft-plain.md': { capture: 'draft', lineage: 'origin' },
-  'raw/projects/examples/draft-on-hold.md': { capture: 'on-hold', lineage: 'origin' },
-  'raw/projects/examples/ingested-logged.md': { capture: 'ingested', sincePass: true, lineage: 'origin' },
-  'raw/workflows/examples/ingested-legacy-approved.md': { capture: 'ingested', legacy: true, lineage: 'origin' },
+  'raw/projects/examples/draft-plain.md': { capture: 'draft', lineage: 'origin', intake: '2026-01-25' },
+  'raw/projects/examples/draft-on-hold.md': { capture: 'on-hold', lineage: 'origin', intake: '2025-12-20' },
+  'raw/projects/examples/ingested-logged.md': { capture: 'ingested', sincePass: true, lineage: 'origin', intake: '2026-01-16' },
+  'raw/workflows/examples/ingested-legacy-approved.md': { capture: 'ingested', legacy: true, lineage: 'origin', intake: '2025-11-20' },
   'raw/workflows/examples/ingested-status-mismatch.md': {
     capture: 'ingested',
     mismatch: 'draft-with-evidence',
-    lineage: 'origin',
+    lineage: 'origin', intake: '2025-12-15',
   },
-  'raw/projects/draft-outside-examples.md': { capture: 'layout-warning', lineage: 'origin' },
+  'raw/projects/draft-outside-examples.md': { capture: 'layout-warning', lineage: 'origin', intake: '2026-01-05' },
   'raw/projects/examples/unlineaged.md': { capture: 'draft', lineage: 'missing-lineage' },
-  'raw/projects/examples/future-dated.md': { capture: 'draft', lineage: 'future-intake-date' },
+  'raw/projects/examples/future-dated.md': { capture: 'draft', lineage: 'future-intake-date', intake: '2999-01-01' },
   // Memory Bridge captures and decoys (i05). State does not depend on origin.
-  'raw/projects/examples/bridge-draft.md': { capture: 'draft', lineage: 'origin' },
-  'raw/projects/examples/bridge-draft-on-hold.md': { capture: 'on-hold', lineage: 'origin' },
-  'raw/projects/examples/bridge-ingested-after-pass.md': { capture: 'ingested', sincePass: true, lineage: 'origin' },
-  'raw/projects/examples/bridge-ingested-before-pass.md': { capture: 'ingested', lineage: 'origin' },
-  'raw/projects/examples/ingested-before-pass.md': { capture: 'ingested', lineage: 'origin' },
-  'raw/projects/examples/decoy-bridge-prose.md': { capture: 'draft', lineage: 'origin' },
-  'raw/projects/examples/decoy-bridge-bullet.md': { capture: 'draft', lineage: 'origin' },
+  'raw/projects/examples/bridge-draft.md': { capture: 'draft', lineage: 'origin', intake: '2026-01-28' },
+  'raw/projects/examples/bridge-draft-on-hold.md': { capture: 'on-hold', lineage: 'origin', intake: '2025-11-28' },
+  'raw/projects/examples/bridge-ingested-after-pass.md': { capture: 'ingested', sincePass: true, lineage: 'origin', intake: '2026-01-19' },
+  'raw/projects/examples/bridge-ingested-before-pass.md': { capture: 'ingested', lineage: 'origin', intake: '2026-01-08' },
+  'raw/projects/examples/ingested-before-pass.md': { capture: 'ingested', lineage: 'origin', intake: '2026-01-06' },
+  'raw/projects/examples/decoy-bridge-prose.md': { capture: 'draft', lineage: 'origin', intake: '2025-12-28' },
+  'raw/projects/examples/decoy-bridge-bullet.md': { capture: 'draft', lineage: 'origin', intake: '2026-01-22' },
+  // Classifier edge cases (review F3).
+  'raw/projects/examples/ingested-without-evidence.md': {
+    capture: 'ingested',
+    mismatch: 'marked-ingested-without-evidence',
+    lineage: 'origin',
+    intake: '2025-12-02',
+  },
+  'raw/projects/examples/ingested-stale-hold.md': {
+    capture: 'ingested',
+    staleHold: true,
+    lineage: 'origin',
+    intake: '2025-11-15',
+  },
 
   // ---- wiki/ ----
   'wiki/index.md': NOT_A_PAGE,
@@ -85,9 +107,14 @@ const CASES = {
 };
 
 // Hand-derived from the fixture's non-file inputs.
-const HOLD_WARNINGS = 1; // scripts/capture-holds.txt names one missing capture
+const MISSING_HOLDS = 1; // scripts/capture-holds.txt lines naming no fixture file
 const LAST_PASS = '2026-01-15'; // newest `lint | maintenance pass`; the 2026-01-18 lint must not reset it
-const PASS_AGE = 17; // days from LAST_PASS to FIXED_NOW
+// m.health at three clocks: fresh, due (stale) but not overdue, and overdue.
+const HEALTH_AT = [
+  { now: new Date(2026, 0, 20, 12), passAge: 5, healthStale: false, overdue: false, ageLabel: '5 DAYS AGO' },
+  { now: new Date(2026, 0, 23, 12), passAge: 8, healthStale: true, overdue: false, ageLabel: '8 DAYS AGO' },
+  { now: FIXED_NOW, passAge: 17, healthStale: true, overdue: true, ageLabel: '17 DAYS AGO' },
+];
 const SKILL_COUNT = 8;
 const SYNTHETIC_SOURCE_ID = /^00000000-0000-4000-8000-0000000000\d{2}$/;
 
@@ -96,6 +123,14 @@ const pages = rows.filter((r) => r.page);
 const where = (pred) => rows.filter(pred).map((r) => r.path).sort();
 const count = (pred) => rows.filter(pred).length;
 const config = createConfig({ REPO_ROOT: FIXTURE });
+const holdWarnings = () => MISSING_HOLDS + count((r) => r.staleHold);
+
+/** Local calendar day `offset` days from `date`, as YYYY-MM-DD. */
+function localDay(date, offset = 0) {
+  const d = new Date(date.getFullYear(), date.getMonth(), date.getDate() + offset);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 async function walkMd(rel) {
   const out = [];
@@ -137,13 +172,24 @@ test('fixture: minimum coverage of every case the CI checks rely on', async () =
     assert.ok(count((r) => r.capture === state) > 0, `no ${state} capture`);
   }
   assert.ok(count((r) => r.legacy) > 0, 'no legacy Approved capture');
-  assert.ok(count((r) => r.mismatch) > 0, 'no status-mismatch capture');
+  for (const code of ['draft-with-evidence', 'marked-ingested-without-evidence']) {
+    assert.ok(count((r) => r.mismatch === code) > 0, `no ${code} capture`);
+  }
+  assert.ok(count((r) => r.staleHold) > 0, 'no stale hold (hold naming an Ingested capture)');
   assert.ok(count((r) => r.sincePass) > 0, 'no capture ingested since the pass');
   assert.ok(
     count((r) => r.capture === 'ingested' && !r.sincePass) > 0,
     'no capture ingested before the pass'
   );
-  assert.ok(HOLD_WARNINGS > 0, 'no hold warning');
+  const { holds } = await readHolds(FIXTURE);
+  const missing = [...holds.keys()].filter((p) => !(p in CASES));
+  assert.equal(missing.length, MISSING_HOLDS, 'holds lines naming no fixture file');
+  assert.ok(MISSING_HOLDS > 0, 'no hold naming a missing capture');
+  assert.deepEqual(
+    [...holds.keys()].filter((p) => CASES[p]?.capture === 'ingested').sort(),
+    where((r) => r.staleHold),
+    'staleHold rows must match the holds lines naming Ingested captures'
+  );
   for (const verdict of ['origin', 'promoted', 'missing-lineage', 'future-intake-date']) {
     assert.ok(count((r) => r.lineage === verdict) > 0, `no ${verdict} lineage case`);
   }
@@ -157,6 +203,32 @@ test('fixture: minimum coverage of every case the CI checks rely on', async () =
     assert.ok(count((r) => r.workflow?.status === status) > 0, `no ${status} workflow`);
   }
   assert.ok(count((r) => r.workflow?.status === 'excluded') > 0, 'no excluded examples/ data');
+  const window = [localDay(FIXED_NOW, -29), localDay(FIXED_NOW)];
+  assert.ok(count((r) => r.lineage === 'origin' && r.intake >= window[0]) > 0, 'no intake inside the 30-day window');
+  assert.ok(count((r) => r.lineage === 'origin' && r.intake < window[0]) > 0, 'no intake before the 30-day window');
+});
+
+test('fixture: the log keeps the entries the cadence rules rely on', async () => {
+  const entries = await readLogEntries(FIXTURE);
+  const pass = lastMaintenancePass(entries);
+  assert.ok(pass, 'no maintenance pass');
+  assert.equal(pass.dateText, LAST_PASS);
+  const above = entries.filter((e) => e.index < pass.index);
+  const below = entries.filter((e) => e.index > pass.index);
+  assert.ok(
+    above.some((e) => e.op === 'lint' && !isMaintenancePass(e)),
+    'no non-pass lint entry above the last pass (it must not reset the cadence)'
+  );
+  assert.ok(above.some((e) => e.op === 'ingest'), 'no ingest entry after the last pass');
+  assert.ok(below.some((e) => e.op === 'ingest'), 'no ingest entry before the last pass');
+  assert.ok(
+    entries.some((e) => isMaintenancePass(e) && /^wiki\/log\/\d{4}-\d{2}\.md$/.test(e.file)),
+    'no maintenance pass in a wiki/log/YYYY-MM.md archive (the pass gap)'
+  );
+  assert.ok(
+    entries.some((e) => e.op === 'ingest' && e.file.startsWith('wiki/log/')),
+    'no ingest entry in the archive'
+  );
 });
 
 test('fixture: every source_id uses the reserved synthetic pattern, once', async () => {
@@ -191,7 +263,7 @@ test('fixture: each capture classifies exactly as its row says', async () => {
     buckets.ingested.filter((i) => i.mismatch).map((i) => [i.path, i.mismatch]).sort(),
     rows.filter((r) => r.mismatch).map((r) => [r.path, r.mismatch]).sort()
   );
-  assert.equal(buckets.holdWarning.length, HOLD_WARNINGS);
+  assert.equal(buckets.holdWarning.length, holdWarnings());
 });
 
 test('fixture: metrics at FIXED_NOW equal the totals tallied from the table', async () => {
@@ -210,11 +282,10 @@ test('fixture: metrics at FIXED_NOW equal the totals tallied from the table', as
     legacyApprovedN: count((r) => r.legacy),
     mismatchN: count((r) => r.mismatch),
     layoutWarningN: count((r) => r.capture === 'layout-warning'),
-    holdWarningN: HOLD_WARNINGS,
+    holdWarningN: holdWarnings(),
   });
 
   assert.equal(m.health.lastPass, LAST_PASS);
-  assert.equal(m.health.passAge, PASS_AGE);
   assert.equal(m.health.ingestedSincePass, count((r) => r.sincePass));
 
   const problems = pages
@@ -238,6 +309,34 @@ test('fixture: metrics at FIXED_NOW equal the totals tallied from the table', as
     'missing-lineage': count((r) => r.lineage === 'missing-lineage'),
   });
   assert.equal(m.knowledgeN, count((r) => r.lineage === 'origin'));
+
+  // Knowledge intake (ADR-0003): distinct source IDs with intake <= day. The
+  // promoted page inherits a source and must not add a point.
+  const intakes = rows.filter((r) => r.lineage === 'origin').map((r) => r.intake);
+  const series = [];
+  for (let i = -29; i <= 0; i++) {
+    const d = localDay(FIXED_NOW, i);
+    series.push({ d, v: intakes.filter((day) => day <= d).length });
+  }
+  assert.deepEqual(m.series, series);
+  assert.equal(m.last30, intakes.filter((day) => day >= localDay(FIXED_NOW, -29)).length);
+});
+
+test('fixture: maintenance-pass health at fresh, due and overdue clocks', async () => {
+  for (const { now, ...want } of HEALTH_AT) {
+    const { health } = await computeMetrics(config, now);
+    assert.deepEqual(
+      {
+        lastPass: health.lastPass,
+        passAge: health.passAge,
+        healthStale: health.healthStale,
+        overdue: health.overdue,
+        ageLabel: health.ageLabel,
+      },
+      { lastPass: LAST_PASS, ...want },
+      localDay(now)
+    );
+  }
 });
 
 test('fixture: each workflow gets the status and kind its row says', async () => {

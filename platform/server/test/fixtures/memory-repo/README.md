@@ -4,6 +4,8 @@ Synthetic, invented data for the console's CI checks (`npm run ci:fixture`). Not
 is real memory: every capture, page, log entry, path and ID was made up for the tests, and
 every `source_id` uses the reserved pattern `00000000-0000-4000-8000-0000000000NN`.
 The `.claude/skills/*/SKILL.md` files are inert stubs, not Skills.
+The stub `.claude/skills/aos-*` shadow the real Skills inside this directory and must never
+be invoked.
 
 Mirrors the Agentic OS memory-repo layout: `AGENTS.md`, `wiki/` (with `log.md` and the
 `log/YYYY-MM.md` archive), `raw/` captures, `templates/`, `.claude/skills/`, and
