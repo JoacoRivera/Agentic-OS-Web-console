@@ -133,8 +133,11 @@ a request reaches git; `spawn` with `shell: false`); **read-only** queries only 
 `symbolic-ref`, `status --porcelain`, `rev-list --count`, `config --get`) — it **never fetches**,
 pulls, pushes or writes; `--no-optional-locks` + `GIT_OPTIONAL_LOCKS=0` so `git status` does not
 refresh `.git/index`, `-c core.fsmonitor=false` so no repo-configured fsmonitor hook runs,
-`GIT_TERMINAL_PROMPT=0`, and repo-locating variables (`GIT_DIR`, `GIT_WORK_TREE`, …) scrubbed so
-`REPO_ROOT` alone decides the clone; a **shared 1600 ms timeout** (the script's budget), past
+`GIT_TERMINAL_PROMPT=0`; a **minimal environment** — the child gets only `PATH`, `HOME`, `LANG`,
+`LC_*`, `TZ` (plus `SYSTEMROOT` on Windows) and those `GIT_*` settings, never a spread of
+`process.env`, so no secret (`FIREFLY_TOKEN`, `PROXY_SECRET`, invariant 7) reaches git or a helper
+the clone's config could start, and no `GIT_DIR`/`GIT_WORK_TREE` can point it away from
+`REPO_ROOT`; a **shared 1600 ms timeout** (the script's budget), past
 which the call is SIGKILLed and the block reports `timeout`. Concurrent requests share one
 computation. Only branch name, upstream name, three integers and the githook boolean leave the
 server; the route sits behind the same Host/Origin guard as every `/api` route. Through the

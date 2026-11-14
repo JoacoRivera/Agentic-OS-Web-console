@@ -1,6 +1,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync } from 'node:fs';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -10,6 +11,7 @@ import {
   GIT_QUERIES,
   NOT_CHECKED,
   computeSessionStatus,
+  gitChildEnv,
   formatCaptureLines,
   formatGitLine,
   formatMaintenanceLine,
@@ -28,9 +30,12 @@ import { createConfig } from '../src/config.js';
  */
 
 // Hermetic git: no user/system config (a global core.hooksPath or fsmonitor
-// would otherwise leak into the githook / read-only assertions).
+// would otherwise leak into the githook / read-only assertions). The console's
+// git child gets only an env allowlist (HOME, not GIT_CONFIG_*), so HOME
+// points at an empty directory too.
 process.env.GIT_CONFIG_GLOBAL = '/dev/null';
 process.env.GIT_CONFIG_NOSYSTEM = '1';
+process.env.HOME = mkdtempSync(path.join(os.tmpdir(), 'aos-session-home-'));
 
 const HAS_GIT = (() => {
   try {
@@ -104,6 +109,7 @@ const status = (root, opts = {}) =>
 
 after(async () => {
   await Promise.all(tmpDirs.map((d) => fs.rm(d, { recursive: true, force: true })));
+  rmSync(process.env.HOME, { recursive: true, force: true });
 });
 
 // ---------- captureAgeDays (_capture_age) ----------
@@ -327,6 +333,105 @@ gitTest('safety: reading the status leaves the index and the worktree untouched'
   await status(root);
   assert.equal((await fs.stat(path.join(root, '.git/index'))).mtimeMs, indexBefore);
   assert.equal(git(root, '--no-optional-locks', 'status', '--porcelain'), porcelain);
+});
+
+// ---------- git hardening: the reasons the GET-path subprocess is acceptable ----------
+
+const SECRETS = {
+  FIREFLY_TOKEN: 'sentinel-firefly-token',
+  PROXY_SECRET: 'sentinel-proxy-secret',
+  HEALTH_REPO_ROOT: '/sentinel/health-root',
+  FIREFLY_URL: 'http://127.0.0.1:1/sentinel',
+};
+
+/** Run `fn` with extra variables in process.env, restoring them afterwards. */
+async function withEnv(vars, fn) {
+  const saved = Object.fromEntries(Object.keys(vars).map((k) => [k, process.env[k]]));
+  Object.assign(process.env, vars);
+  try {
+    return await fn();
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
+test('gitChildEnv is an allowlist: PATH/HOME/LANG/LC_*/TZ + the GIT_* hardening, nothing else', () => {
+  const env = gitChildEnv(
+    {
+      ...SECRETS,
+      PATH: '/usr/bin',
+      HOME: '/home/example',
+      LANG: 'C.UTF-8',
+      LC_ALL: 'C.UTF-8',
+      TZ: 'UTC',
+      GIT_DIR: '/elsewhere/.git',
+      GIT_WORK_TREE: '/elsewhere',
+      SYSTEMROOT: 'C:\\Windows',
+      NODE_OPTIONS: '--require /x.js',
+    },
+    'linux'
+  );
+  assert.deepEqual(env, {
+    PATH: '/usr/bin',
+    HOME: '/home/example',
+    LANG: 'C.UTF-8',
+    LC_ALL: 'C.UTF-8',
+    TZ: 'UTC',
+    GIT_OPTIONAL_LOCKS: '0',
+    GIT_TERMINAL_PROMPT: '0',
+  });
+  assert.equal(gitChildEnv({ SYSTEMROOT: 'C:\\Windows' }, 'win32').SYSTEMROOT, 'C:\\Windows');
+});
+
+gitTest('the git child sees no secret: a clean filter that dumps its env finds none', async () => {
+  const root = await memoryTree({ gitInit: true });
+  const dump = path.join(await tmpDir('aos-session-envdump-'), 'env.txt');
+  // A clean filter is a helper the clone's own config starts during `git status`.
+  git(root, 'config', 'filter.dump.clean', `env > '${dump}'; cat`);
+  await write(root, '.gitattributes', '*.md filter=dump\n');
+  git(root, 'add', '.gitattributes');
+  git(root, 'commit', '-q', '-m', 'attributes');
+  // Stat-dirty (same content, new mtime) so status must re-hash through the filter.
+  const future = new Date(Date.now() + 60_000);
+  await fs.utimes(path.join(root, 'wiki/index.md'), future, future);
+
+  const s = await withEnv(SECRETS, () => status(root));
+  assert.equal(s.git.state, 'ok');
+  const seen = await fs.readFile(dump, 'utf8'); // the filter did run in the child
+  for (const [name, value] of Object.entries(SECRETS)) {
+    assert.ok(!seen.includes(name), `${name} reached the git child`);
+    assert.ok(!seen.includes(value), `the value of ${name} reached the git child`);
+  }
+  assert.match(seen, /^GIT_TERMINAL_PROMPT=0$/m);
+});
+
+gitTest('core.fsmonitor=false: a repo-configured fsmonitor hook never runs', async () => {
+  const root = await memoryTree({ gitInit: true });
+  const dir = await tmpDir('aos-session-fsmonitor-');
+  const marker = path.join(dir, 'ran');
+  const hook = path.join(dir, 'fsmonitor.sh');
+  await fs.writeFile(hook, `#!/bin/sh\ntouch '${marker}'\nexit 1\n`, { mode: 0o755 });
+  git(root, 'config', 'core.fsmonitor', hook);
+
+  git(root, 'status', '--porcelain'); // control: plain git runs the hook
+  await fs.access(marker);
+  await fs.rm(marker);
+
+  await status(root);
+  await assert.rejects(fs.access(marker), { code: 'ENOENT' });
+});
+
+gitTest('GIT_DIR / GIT_WORK_TREE in the server env cannot point git away from REPO_ROOT', async () => {
+  const root = await memoryTree({ gitInit: true });
+  const other = await memoryTree({ gitInit: true });
+  git(other, 'checkout', '-q', '-b', 'elsewhere');
+  await write(other, 'wiki/dirty.md', '# dirty\n');
+
+  const s = await withEnv({ GIT_DIR: path.join(other, '.git'), GIT_WORK_TREE: other }, () => status(root));
+  assert.deepEqual(s.git, { state: 'ok', branch: 'main', upstream: null, ahead: null, behind: null, dirtyN: 0 });
 });
 
 // ---------- git, against fake runners ----------

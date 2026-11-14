@@ -44,9 +44,14 @@ import {
  * - **No index or hook side effects.** `--no-optional-locks` (and
  *   `GIT_OPTIONAL_LOCKS=0`) stop `git status` from refreshing `.git/index`;
  *   `-c core.fsmonitor=false` stops a repo-configured fsmonitor hook from
- *   running; `GIT_TERMINAL_PROMPT=0` forbids prompts; repo-locating
- *   variables (`GIT_DIR`, `GIT_WORK_TREE`, …) are scrubbed so `cwd` =
- *   `REPO_ROOT` alone decides which clone is read.
+ *   running; `GIT_TERMINAL_PROMPT=0` forbids prompts.
+ * - **Minimal environment.** The child never inherits `process.env`: it gets
+ *   a fixed allowlist (`PATH`, `HOME`, `LANG`, `LC_*`, `TZ`; `SYSTEMROOT` on
+ *   Windows only) plus the `GIT_*` hardening settings above. So no secret
+ *   (`FIREFLY_TOKEN`, `PROXY_SECRET`, …, invariant 7) reaches git or a helper
+ *   the clone's config starts (a `.gitattributes` clean filter), and no
+ *   repo-locating variable (`GIT_DIR`, `GIT_WORK_TREE`, …) can point it away
+ *   from `cwd` = `REPO_ROOT`.
  * - **Timeout.** One shared 1600 ms budget across the calls (the script's
  *   `BUDGET_SECONDS`); a call past it is SIGKILLed and the block reports
  *   `timeout` — never a guessed value.
@@ -73,16 +78,21 @@ export const GIT_QUERIES = Object.freeze({
   hooksPath: freeze(['config', '--get', 'core.hooksPath']),
 });
 const HARDENING = Object.freeze(['--no-optional-locks', '-c', 'core.fsmonitor=false']);
-const SCRUBBED_ENV = Object.freeze([
-  'GIT_DIR',
-  'GIT_WORK_TREE',
-  'GIT_INDEX_FILE',
-  'GIT_COMMON_DIR',
-  'GIT_OBJECT_DIRECTORY',
-  'GIT_ALTERNATE_OBJECT_DIRECTORIES',
-  'GIT_NAMESPACE',
-  'GIT_PREFIX',
-]);
+const ENV_ALLOWLIST = Object.freeze(['PATH', 'HOME', 'LANG', 'TZ']);
+const GIT_ENV = Object.freeze({ GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' });
+
+/**
+ * The git child's whole environment: the allowlist above, every `LC_*`
+ * locale variable, and the git hardening settings — never a spread of
+ * `source`, so nothing else (a secret, a `GIT_DIR`) can reach the child.
+ */
+export function gitChildEnv(source = process.env, platform = process.platform) {
+  const env = {};
+  const keys = [...ENV_ALLOWLIST, ...(platform === 'win32' ? ['SYSTEMROOT'] : [])];
+  for (const key of keys) if (source[key] !== undefined) env[key] = source[key];
+  for (const key of Object.keys(source)) if (/^LC_[A-Z_]+$/.test(key)) env[key] = source[key];
+  return { ...env, ...GIT_ENV };
+}
 
 export const NOT_CHECKED = Object.freeze({
   lintDeps: Object.freeze({
@@ -105,8 +115,7 @@ const codeError = (message, code) => Object.assign(new Error(message), { code })
  */
 export function defaultRunGit(args, { cwd, timeoutMs }) {
   return new Promise((resolve, reject) => {
-    const env = { ...process.env, GIT_OPTIONAL_LOCKS: '0', GIT_TERMINAL_PROMPT: '0' };
-    for (const key of SCRUBBED_ENV) delete env[key];
+    const env = gitChildEnv();
     let settled = false;
     let child;
     let timer;
