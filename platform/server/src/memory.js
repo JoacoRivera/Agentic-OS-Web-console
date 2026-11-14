@@ -41,9 +41,10 @@ export class BadQueryError extends Error {
   }
 }
 
-/** The display summary: the full `>` summary truncated the way the reference prints it. */
+/** The display summary: the full `>` summary truncated the way the reference prints it (`[:160].rstrip() + "…"`, in code points). */
 function displaySummary(summary) {
-  return summary.length <= SUMMARY_MAX_CHARS ? summary : pyRstrip(summary.slice(0, SUMMARY_MAX_CHARS)) + '…';
+  const chars = [...summary];
+  return chars.length <= SUMMARY_MAX_CHARS ? summary : pyRstrip(chars.slice(0, SUMMARY_MAX_CHARS).join('')) + '…';
 }
 
 /**

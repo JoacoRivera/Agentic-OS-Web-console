@@ -91,15 +91,23 @@ const TOKEN_RE = /\p{Nd}+(?:\.\p{Nd}+)+|[a-z0-9]+/gu;
  * Lowercase, accent-folded word tokens without stopwords; a dotted version is
  * one token, and one with three or more parts also yields its `major.minor`.
  */
+const MARK = /\p{M}/u;
+const MARKS = /\p{M}/gu;
+
 export function tokenize(text) {
-  const folded = text.toLowerCase().normalize('NFKD').replace(/\p{M}/gu, (ch) => (isCombining(ch) ? '' : ch));
+  let folded = text.toLowerCase().normalize('NFKD');
+  if (MARK.test(folded)) folded = folded.replace(MARKS, (ch) => (isCombining(ch) ? '' : ch));
   const tokens = [];
-  for (const [token] of folded.matchAll(TOKEN_RE)) {
-    // Python's len() counts code points, not UTF-16 units.
-    if ([...token].length <= 1 || STOPWORDS.has(token)) continue;
+  const re = new RegExp(TOKEN_RE); // own lastIndex: tokenize stays re-entrant
+  for (let m = re.exec(folded); m; m = re.exec(folded)) {
+    const token = m[0];
+    // Python's len() counts code points: a lone astral digit is two UTF-16 units but one character.
+    if (token.length <= 1 || (token.length === 2 && token.codePointAt(0) > 0xffff) || STOPWORDS.has(token)) continue;
     tokens.push(token);
-    const parts = token.split('.');
-    if (parts.length >= 3) tokens.push(parts.slice(0, 2).join('.'));
+    const first = token.indexOf('.');
+    if (first === -1) continue;
+    const second = token.indexOf('.', first + 1);
+    if (second !== -1) tokens.push(token.slice(0, second));
   }
   return tokens;
 }
