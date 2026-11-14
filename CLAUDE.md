@@ -92,7 +92,8 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
    (ADR-0007); `workflow_kind` maps to two booleans (`requires_verification`,
    `requires_runbook_shape`), and in P1 only `runbook`/`eval-suite` are status-distinct.
    Status precedence (first match wins): `Missing links` > `Needs review` > `Unclassified` >
-   `Stale` > `OK`. Classifying the ten existing workflows is P1 DoD. The registry is a
+   `Stale` > `OK`. `Stale` is measured from frontmatter `updated:`, never mtime (ADR-0006
+   amendment, 2026-11-14). Classifying the ten existing workflows is P1 DoD. The registry is a
    discovery/quality signal, not a ceremony enforcer.
 
 6. **Family Health is a second repo root: read-only, opt-in, loopback-only** (ADR-0010).
@@ -131,7 +132,8 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
    no triage, approval or review step to model (memory repo ADR-0002). The cadence is the
    newest `lint | maintenance pass` entry across `wiki/log.md` and `wiki/log/YYYY-MM.md`
    (`scripts/wiki_log.py`); other `lint` entries never reset it, and archive files are not
-   pages. When those scripts change, `server/src/captures.js` and the
+   pages. Inline `review-by:` dates mirror wiki-lint check 25 (`server/src/reviewBy.js`).
+   When those scripts change, `server/src/captures.js`, `server/src/reviewBy.js` and the
    `check:metrics-groundtruth` recount change with them.
 
 ## Domain language (use these exact terms)

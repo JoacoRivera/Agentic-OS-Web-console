@@ -75,3 +75,21 @@ becomes `Missing links > Needs review > Unclassified > Stale > OK`).
 WorkflowRegistry is a discovery and quality signal, not a ceremony enforcer. Flag objective
 defects; surface editorial metadata separately, so real problems don't drown in false
 warnings.
+
+## Amendment — Stale is measured from frontmatter `updated:` (2026-11-14)
+
+Status: **Accepted** (2026-11-14, approved by the owner via the top-10 run).
+
+`Stale` keeps its meaning — not touched in 90 days (`WORKFLOW_STALE_DAYS`), checked only after
+the objective checks pass, in the same precedence. What changes is the evidence for
+"touched": it is the workflow's own frontmatter `updated:` day, never the file's mtime and
+never Git. A clone or pull resets every mtime, so mtime made a fresh checkout look current
+for 90 days.
+
+- `updated:` is read as written (YAML would roll `2026-13-45` into a valid date). A missing
+  `updated:` (the memory repo's wiki-lint check 2 already requires it) or one that is not a
+  real `YYYY-MM-DD` day is a `metadata` defect, so the row is `Needs review`, not a guess.
+  `checks_exempt: [metadata]` does not waive it: a row without a known age is never `OK`.
+- A due or malformed inline `review-by: YYYY-MM-DD` date (wiki-lint check 25) is
+  **informational-only**: a registry informational check and a Maintenance row. It never
+  changes a row's status or the maintenance-pass cadence.
