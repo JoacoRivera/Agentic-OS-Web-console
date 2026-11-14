@@ -9,6 +9,13 @@ const CHECK_STATUS_LABEL = {
   'n/a': 'n/a',
 };
 
+/** Age of the frontmatter `updated:` day, in words (`ageDays` is whole calendar days). */
+export function ageText(ageDays) {
+  if (ageDays < 0) return 'in the future';
+  if (ageDays === 0) return 'today';
+  return ageDays === 1 ? '1 day ago' : `${ageDays} days ago`;
+}
+
 function ChecksTable({ title, checks }) {
   if (checks.length === 0) return null;
   return (
@@ -99,7 +106,12 @@ export default function WorkflowDetail({ workflow, onBack, onOpenDoc }) {
           </tr>
           <tr>
             <td>Updated</td>
-            <td>{workflow.mtime.slice(0, 10)}</td>
+            <td>
+              {workflow.updated ?? '— (no valid updated: frontmatter)'}
+              {workflow.ageDays !== null && workflow.ageDays !== undefined && (
+                <span className="dim"> · {ageText(workflow.ageDays)}</span>
+              )}
+            </td>
           </tr>
           {workflow.checksExempt.length > 0 && (
             <tr>
