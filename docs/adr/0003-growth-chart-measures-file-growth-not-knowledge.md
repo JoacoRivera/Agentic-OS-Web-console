@@ -1,6 +1,6 @@
 # Knowledge growth uses explicit intake lineage
 
-Status: accepted; amended 2026-07-27 and 2026-11-13
+Status: accepted; amended 2026-07-27, 2026-11-13 and 2026-11-14
 
 The console's growth chart is keyed on explicit semantic lineage. It counts distinct
 knowledge-intake sources by `knowledge_intake_date`, deduplicated by `source_id`.
@@ -143,3 +143,23 @@ healthStale, overdue, ingestedSincePass}`; `lastLint`/`lintAge` are removed). Th
 files are the log, not pages: they no longer count in `wikiN` or lineage coverage, as the
 memory repo's lint exempts them from every page check. `check:metrics-groundtruth` recounts
 all of this independently.
+
+## Amendment (accepted 2026-11-14): memory-flow stats
+
+`/api/metrics.flow` reports capture → ingest latency, maintenance-pass gaps, Ingest
+queue and on-hold ages, and monthly capture / ingest-entry counts. It mirrors the
+memory repo's `scripts/memory-stats.py` the way capture state mirrors
+`scripts/aos_wiki/inventory.py`: same capture buckets, same log reading
+(`scripts/wiki_log.py`), and the same intake-date reading — `source_id` and
+`knowledge_intake_date` as written on their frontmatter line, quotes stripped, a
+lowercase canonical UUID and a real, non-future `YYYY-MM-DD`. This reading applies to
+flow stats only; the knowledge-intake series keeps the stricter rules above. A capture
+without a valid intake date is counted as unlineaged and left out of every dated
+figure; a figure with no data is reported absent, never as zero. Nothing is inferred
+from Git, file times or file names. When `memory-stats.py` changes,
+`server/src/flow.js` and the `check:metrics-groundtruth` recount change with it.
+`check:memory-stats-parity` compares the two implementations from a terminal; it is
+not an Executable Operation and is not in the allowlist (ADR-0001).
+
+Approved by the owner on 2026-11-14 via the top-10 run. The Knowledge intake
+chart keeps its strict reader.

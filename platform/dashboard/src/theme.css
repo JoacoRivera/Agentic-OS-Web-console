@@ -1653,3 +1653,32 @@ svg.growth {
 .fin-nosum { margin-top: 8px; font-size: 11px; font-style: italic; }
 .fin-notice { margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--line);
   font-size: 11px; color: var(--muted); }
+
+/* ---- memory-flow stats: month table (Maintenance section) ---- */
+
+.flow-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.flow-table th {
+  text-align: left;
+  padding: 6px 8px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--line);
+}
+
+.flow-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+}
+
+.flow-table td + td,
+.flow-table th + th {
+  text-align: right;
+}

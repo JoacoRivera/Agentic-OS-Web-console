@@ -7,7 +7,8 @@
 // does; health from the newest `lint | maintenance pass` entry across the log
 // and its archive; knowledge intake deduplicated by explicit
 // `source_id` / `knowledge_intake_date` / `promoted_from` lineage; review-by
-// dates as wiki-lint check 25 finds them). It
+// dates as wiki-lint check 25 finds them; memory-flow stats as the memory
+// repo's scripts/memory-stats.py computes them). It
 // deliberately does NOT import `server/src/metrics.js`; the active filesystem
 // roots are the source of truth.
 //
@@ -243,6 +244,8 @@ function capturesRecount(rawAll, wikiAll) {
   let layoutWarningN = 0;
   let holdWarningN = warnings;
   const ingested = [];
+  const onHold = [];
+  const drafts = [];
   const inScope = new Set();
   const bridge = { draftN: 0, heldN: 0, ingestedN: 0 };
   const bridgePaths = new Set();
@@ -270,8 +273,13 @@ function capturesRecount(rawAll, wikiAll) {
       if (status === 'Approved') legacyApprovedN++;
       if (marked !== evidence) mismatchN++;
       if (holds.has(rel)) holdWarningN++;
-    } else if (holds.has(rel)) heldN++;
-    else draftN++;
+    } else if (holds.has(rel)) {
+      heldN++;
+      onHold.push(rel);
+    } else {
+      draftN++;
+      drafts.push(rel);
+    }
   }
   for (const h of holds) if (!inScope.has(h)) holdWarningN++;
 
@@ -311,6 +319,171 @@ function capturesRecount(rawAll, wikiAll) {
     sinceByOrigin,
     sinceRows,
     bridgePaths,
+    capturePaths: { ingested, onHold, draft: drafts },
+  };
+}
+
+// ---------- memory-flow recount (memory repo scripts/memory-stats.py) ----------
+// ADR-0003 amendment 2026-11-14. Re-implemented by scanning characters and
+// lines rather than with the server's regexes: the intake day is read the way
+// memory-stats.py reads it (the value written on the `source_id:` /
+// `knowledge_intake_date:` line, quotes stripped, a lowercase canonical UUID,
+// a real non-future day), and figures are rebuilt from sorted value lists.
+
+// Python's `\s` on str is `str.isspace()` — not JS's `\s` (which adds U+FEFF
+// and lacks \x1c-\x1f and \x85). Listed by code point.
+const PY_SPACE = new Set([
+  0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x1c, 0x1d, 0x1e, 0x1f, 0x20, 0x85, 0xa0, 0x1680,
+  0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a,
+  0x2028, 0x2029, 0x202f, 0x205f, 0x3000,
+]);
+const isSpace = (ch) => PY_SPACE.has(ch.codePointAt(0));
+// `date.fromisoformat` rejects year 0, which a JS ISO round trip accepts.
+const isPyDay = (day) => !day.startsWith('0000') && isRealDay(day);
+const HEX = '0123456789abcdef';
+
+/** First non-space token after `key\s*:\s*` at a line start of `block`, or null. */
+function frontmatterToken(block, key) {
+  for (let start = 0; start !== -1 && start <= block.length; ) {
+    if (block.startsWith(key, start)) {
+      let i = start + key.length;
+      while (i < block.length && isSpace(block[i])) i++;
+      if (block[i] === ':') {
+        i++;
+        while (i < block.length && isSpace(block[i])) i++;
+        let j = i;
+        while (j < block.length && !isSpace(block[j])) j++;
+        if (j > i) return block.slice(i, j);
+      }
+    }
+    const nl = block.indexOf('\n', start);
+    start = nl === -1 ? -1 : nl + 1;
+  }
+  return null;
+}
+
+function unquote(value) {
+  let a = 0;
+  let b = value.length;
+  while (a < b && (value[a] === '"' || value[a] === "'")) a++;
+  while (b > a && (value[b - 1] === '"' || value[b - 1] === "'")) b--;
+  return value.slice(a, b);
+}
+
+function isLowerUuid(value) {
+  if (value.length !== 36) return false;
+  return [...value].every((ch, i) => ([8, 13, 18, 23].includes(i) ? ch === '-' : HEX.includes(ch)));
+}
+
+/** The capture's intake day under the memory-stats.py rule, or null. */
+function flowIntakeDay(text, today) {
+  const lines = text.split('\n');
+  if (lines[0] !== '---' || lines.length < 3) return null;
+  // The closing fence is the first later line starting with `---`; the block
+  // between needs at least one line, as `^---\n(.*?)\n---` does.
+  let close = -1;
+  for (let i = 2; i < lines.length; i++) {
+    if (lines[i].startsWith('---')) {
+      close = i;
+      break;
+    }
+  }
+  if (close === -1) return null;
+  const block = lines.slice(1, close).join('\n');
+  const sid = frontmatterToken(block, 'source_id');
+  const intake = frontmatterToken(block, 'knowledge_intake_date');
+  if (sid === null || intake === null || !isLowerUuid(unquote(sid))) return null;
+  const day = unquote(intake);
+  const shaped = day.length === 10 && day[4] === '-' && day[7] === '-'
+    && [...day].every((ch, i) => i === 4 || i === 7 || (ch >= '0' && ch <= '9'));
+  if (!shaped || !isPyDay(day)) return null;
+  return day <= today ? day : null;
+}
+
+const dayNumber = (day) => Date.parse(`${day}T00:00:00Z`) / 86400e3;
+
+function summary(values) {
+  if (values.length === 0) return { n: 0, min: null, median: null, p90: null, max: null };
+  const s = [...values].sort((a, b) => a - b);
+  const median = s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+  let rank = Math.ceil(s.length * 0.9 - 1e-9);
+  if (rank < 1) rank = 1;
+  return { n: s.length, min: s[0], median, p90: s[rank - 1], max: s.at(-1) };
+}
+
+function flowRecount(capturePaths) {
+  const today = todayLocal();
+  const dated = logEntriesRecount().filter((e) => isPyDay(e.date));
+  const ingestDates = new Map(); // path -> every dated ingest day naming it
+  for (const e of dated) {
+    if (e.op !== 'ingest') continue;
+    for (const line of e.lines) {
+      for (const p of rawPathsIn(line)) ingestDates.set(p, [...(ingestDates.get(p) ?? []), e.date]);
+    }
+  }
+  const caps = [];
+  for (const state of ['ingested', 'onHold', 'draft']) {
+    for (const rel of capturePaths[state]) {
+      const days = [...(ingestDates.get(rel) ?? [])].sort();
+      caps.push({ state, intake: flowIntakeDay(readNormalized(rel) ?? '', today), ingest: days[0] ?? null });
+    }
+  }
+
+  const monthKeys = new Set([
+    ...caps.filter((c) => c.intake).map((c) => c.intake.slice(0, 7)),
+    ...dated.filter((e) => e.op === 'ingest').map((e) => e.date.slice(0, 7)),
+  ]);
+  const months = [...monthKeys].sort().map((month) => ({
+    month,
+    captures: caps.filter((c) => c.intake?.startsWith(month)).length,
+    ingestEntries: dated.filter((e) => e.op === 'ingest' && e.date.startsWith(month)).length,
+  }));
+
+  const timed = caps.filter((c) => c.state === 'ingested' && c.intake);
+  const lags = timed.filter((c) => c.ingest).map((c) => dayNumber(c.ingest) - dayNumber(c.intake));
+  const kept = lags.filter((d) => d >= 0);
+  const inRange = (lo, hi) => kept.filter((d) => d >= lo && d <= hi).length;
+
+  const passDays = [...new Set(dated.filter(isPass).map((e) => e.date))].sort();
+  const gaps = [];
+  for (let i = 1; i < passDays.length; i++) {
+    gaps.push({ from: passDays[i - 1], to: passDays[i], days: dayNumber(passDays[i]) - dayNumber(passDays[i - 1]) });
+  }
+  const longest = Math.max(...gaps.map((g) => g.days));
+  const newest = passDays.length ? passDays[passDays.length - 1] : null;
+
+  const queueOf = (state) => {
+    const items = caps.filter((c) => c.state === state);
+    const ages = items.filter((c) => c.intake).map((c) => dayNumber(today) - dayNumber(c.intake));
+    return { count: items.length, unlineaged: items.length - ages.length, ages: summary(ages) };
+  };
+
+  return {
+    today,
+    captures: { total: caps.length, unlineaged: caps.filter((c) => !c.intake).length },
+    months,
+    latency: {
+      ...summary(kept),
+      buckets: [
+        { label: 'same day', count: inRange(0, 0) },
+        { label: '1-3d', count: inRange(1, 3) },
+        { label: '4-7d', count: inRange(4, 7) },
+        { label: '8-30d', count: inRange(8, 30) },
+        { label: '>30d', count: inRange(31, Infinity) },
+      ],
+      noDatedIngestEntry: timed.length - lags.length,
+      ingestBeforeIntake: lags.length - kept.length,
+    },
+    passes: {
+      days: passDays.length,
+      newest,
+      openGapDays: newest ? dayNumber(today) - dayNumber(newest) : null,
+      gaps: summary(gaps.map((g) => g.days)),
+      gapsOverCadence: gaps.filter((g) => g.days > 7).length,
+      cadenceDays: 7,
+      longestGap: gaps.find((g) => g.days === longest) ?? null,
+    },
+    queue: { draft: queueOf('draft'), onHold: queueOf('onHold') },
   };
 }
 
@@ -685,6 +858,7 @@ async function recount() {
     rawProj: raw.filter((p) => p.startsWith('raw/projects/')).length,
     rawFlow: raw.filter((p) => p.startsWith('raw/workflows/')).length,
     ...caps,
+    flow: flowRecount(caps.capturePaths),
     ...lineage,
     passAge,
     healthStale: passAge === null || passAge >= 7,
@@ -793,6 +967,15 @@ try {
   const wantOrigins = (rows) => rows.map((d) => [d.path, truth.bridgePaths.has(d.path) ? 'bridge' : 'other']);
   check('drafts[] / held[] per-row origin', rowOrigins([...console_.drafts, ...console_.held]),
     wantOrigins([...console_.drafts, ...console_.held]));
+
+  // Memory-flow stats (memory-stats.py), block by block, plus one consistency.
+  // No `openGapDays = health.passAge` check: health takes the first pass in log
+  // order (wiki_log), flow the newest pass date (memory-stats.py); they differ
+  // on an out-of-order log, and each is already checked against its own recount.
+  for (const key of ['today', 'captures', 'months', 'latency', 'passes', 'queue']) {
+    check(`flow.${key}`, console_.flow?.[key], truth.flow[key]);
+  }
+  check('flow.captures.total = capN', console_.flow?.captures?.total, console_.capN);
 
   // The whole 30-point curve, not just its endpoint: a wrong intake *date*
   // moves points without moving the total.

@@ -81,6 +81,22 @@ retired on 2026-07-04 (ADR-0002 amendment), after its final run passed against t
 repo; the legacy HUD files were then removed on 2026-07-30.
 _Avoid_: reintroducing it, treating HUD parity as a permanent invariant, or putting it in the permanent allowlist
 
+**Memory-flow stats**:
+How captures move through memory, as `/api/metrics.flow`: capture → ingest latency (days
+from a capture's knowledge intake date to the first dated `ingest` log entry naming it),
+maintenance-pass gaps (days between distinct pass days, plus the open gap to today), Ingest
+queue and on-hold ages (from the intake date), and monthly counts (captures by intake month,
+`ingest` log entries by heading month). It mirrors the memory repo's
+`scripts/memory-stats.py`, including its intake-date reading (`source_id` and
+`knowledge_intake_date` as written on their line, quotes stripped, a lowercase canonical UUID,
+a real non-future day) — looser than the Knowledge intake chart's reader, and used for flow
+stats only (ADR-0003 amendment 2026-11-14). Dates come from explicit lineage only — never
+Git, file times or a file name; a capture without a valid intake date is counted as unlineaged and left out of
+every dated figure, and a figure with no data is reported absent, never as zero.
+`check:metrics-groundtruth` recounts it; `check:memory-stats-parity` compares it with
+`memory-stats.py` from a terminal and is not an Executable Operation.
+_Avoid_: backlog (the queue is the Ingest queue), burndown, throughput target
+
 ### Memory lineage dates
 
 Three distinct dates — never collapse them into one ambiguous "creation".

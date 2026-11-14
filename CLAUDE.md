@@ -133,8 +133,12 @@ These come from the ADRs and `CONTEXT.md`. Breaking one is a regression even if 
    newest `lint | maintenance pass` entry across `wiki/log.md` and `wiki/log/YYYY-MM.md`
    (`scripts/wiki_log.py`); other `lint` entries never reset it, and archive files are not
    pages. Inline `review-by:` dates mirror wiki-lint check 25 (`server/src/reviewBy.js`).
-   When those scripts change, `server/src/captures.js`, `server/src/reviewBy.js` and the
-   `check:metrics-groundtruth` recount change with them.
+   Memory-flow stats (`/api/metrics.flow`) mirror `scripts/memory-stats.py`, including its
+   intake-date reading (ADR-0003 amendment, 2026-11-14), and the Session Status section
+   mirrors `scripts/aos_status.py`. When those scripts change, `server/src/captures.js`,
+   `reviewBy.js`, `flow.js`, `sessionStatus.js` and the `check:metrics-groundtruth` recount
+   change with them. `check:memory-stats-parity` and `check:session-status` compare against
+   that Python from a terminal only; neither is in the executable allowlist.
 
 ## Domain language (use these exact terms)
 

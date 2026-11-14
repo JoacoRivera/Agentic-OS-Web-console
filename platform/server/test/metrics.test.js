@@ -698,6 +698,9 @@ test('a missing scan root is treated as an empty collection', async () => {
     const m = await computeMetrics(createConfig({ REPO_ROOT: emptyRoot }), now);
     assert.equal(m.all, 0);
     assert.equal(m.lineage.eligibleN, 0);
+    assert.deepEqual(m.flow.captures, { total: 0, unlineaged: 0 });
+    assert.deepEqual(m.flow.months, []);
+    assert.equal(m.flow.latency.median, null);
   } finally {
     await fs.rm(emptyRoot, { recursive: true, force: true });
   }
@@ -725,7 +728,7 @@ test('GET /api/metrics returns the documented fields', async () => {
     'wikiN', 'rawN', 'all', 'examples', 'projects', 'workflows', 'rawProj', 'rawFlow',
     'capN', 'draftN', 'heldN', 'ingestedN', 'captures', 'drafts', 'held', 'knowledgeN', 'lineage',
     'series', 'last30', 'week', 'weekTotal',
-    'activeDays', 'recent', 'health', 'trend', 'generatedAt',
+    'activeDays', 'recent', 'health', 'flow', 'trend', 'generatedAt',
   ]) {
     assert.ok(field in m, `missing field: ${field}`);
   }
