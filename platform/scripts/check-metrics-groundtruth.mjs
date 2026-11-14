@@ -215,6 +215,12 @@ function holdsRecount() {
   return { holds, warnings };
 }
 
+// The Memory Bridge marker (memory repo scripts/aos_memory.py `_BRIDGE_SOURCE`),
+// hardcoded here a second time on purpose: a rewording must be changed knowingly
+// in both places. Detected by a per-line regex, not the producer's startsWith/includes.
+const BRIDGE_LINE_RE = /^Source:.*Agentic OS Memory Bridge automatic capture/;
+const isBridge = (text) => pyLines(text).some((l) => BRIDGE_LINE_RE.test(l));
+
 function capturesRecount(rawAll, wikiAll) {
   const entries = logEntriesRecount();
   const oldestIngest = new Map();
@@ -232,6 +238,8 @@ function capturesRecount(rawAll, wikiAll) {
   let holdWarningN = warnings;
   const ingested = [];
   const inScope = new Set();
+  const bridge = { draftN: 0, heldN: 0, ingestedN: 0 };
+  const bridgePaths = new Set();
   for (const rel of rawAll) {
     if (isTemplate(rel)) continue;
     const text = readNormalized(rel) ?? '';
@@ -244,6 +252,12 @@ function capturesRecount(rawAll, wikiAll) {
     if (!inside && !marked) {
       layoutWarningN++;
       continue;
+    }
+    if (isBridge(text)) {
+      bridgePaths.add(rel);
+      if (marked || evidence) bridge.ingestedN++;
+      else if (holds.has(rel)) bridge.heldN++;
+      else bridge.draftN++;
     }
     if (marked || evidence) {
       ingested.push(rel);
@@ -259,6 +273,14 @@ function capturesRecount(rawAll, wikiAll) {
   const since = pass
     ? ingested.filter((p) => (oldestIngest.get(p) ?? Infinity) < pass.index).length
     : null;
+  let sinceByOrigin = null;
+  if (pass) {
+    sinceByOrigin = { bridge: 0, other: 0 };
+    for (const p of ingested) {
+      if (!((oldestIngest.get(p) ?? Infinity) < pass.index)) continue;
+      sinceByOrigin[bridgePaths.has(p) ? 'bridge' : 'other']++;
+    }
+  }
   return {
     capN: draftN + heldN + ingested.length,
     draftN,
@@ -267,6 +289,8 @@ function capturesRecount(rawAll, wikiAll) {
     captures: { legacyApprovedN, mismatchN, layoutWarningN, holdWarningN },
     lastPass: pass?.date ?? null,
     ingestedSincePass: since,
+    bridge,
+    sinceByOrigin,
   };
 }
 
@@ -658,12 +682,15 @@ try {
   ]) {
     check(f, console_[f], truth[f]);
   }
-  check('captures (legacy Approved / mismatch / layout / hold warnings)', console_.captures, truth.captures);
+  const { bridge: consoleBridge, ...consoleCaptures } = console_.captures;
+  check('captures (legacy Approved / mismatch / layout / hold warnings)', consoleCaptures, truth.captures);
   check('health.lastPass (maintenance pass)', console_.health.lastPass, truth.lastPass);
   check('health.passAge', console_.health.passAge, truth.passAge);
   check('health.healthStale (pass due)', console_.health.healthStale, truth.healthStale);
   check('health.overdue', console_.health.overdue, truth.overdue);
   check('health.ingestedSincePass', console_.health.ingestedSincePass, truth.ingestedSincePass);
+  check('captures.bridge (Memory Bridge Draft / on hold / Ingested)', consoleBridge, truth.bridge);
+  check('health.sincePass.byOrigin', console_.health.sincePass?.byOrigin ?? null, truth.sinceByOrigin);
 
   // The whole 30-point curve, not just its endpoint: a wrong intake *date*
   // moves points without moving the total.
