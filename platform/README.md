@@ -85,7 +85,10 @@ knowledge-intake `series` keyed on explicit `source_id` + `knowledge_intake_date
 origins, with `promoted_from` pages resolving to those origins instead of counting
 again (ADR-0003); a 7-day `week` by mtime (`weekTotal`, `activeDays`); `recent`; `health`
 from the newest `lint | maintenance pass` entry across `wiki/log.md` and its archive (due at
-7+ days, `overdue` at 10+, plus `ingestedSincePass`); `trend`.
+7+ days, `overdue` at 10+, plus `ingestedSincePass`, and `reviewBy` — the wiki-lint check-25
+recount of inline `review-by: YYYY-MM-DD` dates on every `wiki/` page but the log:
+`dueN`/`malformedN`/`pendingN`, `nextDue`, and at most 20 `{path, line, date, state}` items,
+information only, never moving the cadence); `trend`.
 
 Lineage fields live in YAML frontmatter. Intake origins declare `source_id` and a bare,
 unquoted `knowledge_intake_date: YYYY-MM-DD`; timestamps, quoted dates, comments, invalid
@@ -117,7 +120,11 @@ never invokes Hermes, Claude, Codex, or an Agentic OS Skill (ADR-0001).
 
 Scans `wiki/workflows/**.md`, excluding `**/{examples,cases,results}/**` (related data,
 never status verdicts). Status comes from **objective defects only** (ADR-0006), first
-match wins: `Missing links > Needs review > Unclassified > Stale > OK`. A workflow without
+match wins: `Missing links > Needs review > Unclassified > Stale > OK`. **Stale** means the
+frontmatter `updated:` day is more than 90 days (`WORKFLOW_STALE_DAYS`) before today; file
+mtime and Git are never evidence of age (a clone resets every mtime). A missing `updated:`
+or one that is not a real `YYYY-MM-DD` day is broken metadata, and rows carry
+`updated`/`ageDays`. A workflow without
 `workflow_kind` frontmatter is **Unclassified** — never inferred, never green (ADR-0007);
 kind-independent defects (not indexed, broken metadata, unaccepted TODO/FIXME/open
 questions) still apply and out-rank it. `workflow_kind` maps to two booleans
@@ -126,7 +133,7 @@ status-distinct in P1. "Verification" means a stated validation method (`## Veri
 a "Manual run checklist", "Result recording", or an explicit "Verification: not
 applicable"), and `checks_exempt: [<check-id>]` opts out of a check that legitimately
 doesn't apply. Editorial niceties (examples, "when to use", related skill, usage
-reference) are informational-only. Per-workflow lookups use `?path=` — workflow paths
+reference, a due `review-by:` date) are informational-only. Per-workflow lookups use `?path=` — workflow paths
 contain slashes.
 
 ## Skill registry (`GET /api/skills`)
