@@ -47,6 +47,16 @@ a skim of what was ingested since the last pass, and judgment fixes, logged as
 files are the log, never wiki pages.
 _Avoid_: lint cadence, last lint, reconcile pass (a `lint` entry is not a pass)
 
+**Session Status**:
+A read-only console **section** (`GET /api/session-status`) that computes live, by the same
+rules, what the memory repo's `scripts/aos_status.py` prints at session start: the
+maintenance pass, the capture queue (oldest age, holds), git state of the `REPO_ROOT` clone,
+and setup. Lint deps and skills sync are `not-checked` (reported with the command that does
+check them, never as ok). It is **not an Operation** and runs nothing on request; the
+`session-start` Guided Operation is a separate checklist that tells the reader to run the
+script.
+_Avoid_: session-start (that is the Guided Operation), calling it an Operation or wiring an Operation to it, status check
+
 ### Metrics
 
 **Canonical metrics implementation**:
