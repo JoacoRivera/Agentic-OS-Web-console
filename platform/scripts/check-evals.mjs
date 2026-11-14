@@ -28,8 +28,10 @@ function walk(relDir) {
   if (!fs.existsSync(abs)) return out;
   for (const entry of fs.readdirSync(abs, { withFileTypes: true })) {
     const rel = `${relDir}/${entry.name}`;
+    // Symlinks are skipped, as the server scanner does (a documented
+    // divergence from lint's rglob).
     if (entry.isDirectory()) out.push(...walk(rel));
-    else if (entry.name.endsWith('.md') && entry.name !== 'README.md' && entry.name !== '_template.md') out.push(rel);
+    else if (entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'README.md' && entry.name !== '_template.md') out.push(rel);
   }
   return out;
 }
@@ -58,7 +60,9 @@ function unfencedLines(text) {
 const api = await listEvals(config);
 
 // ---- results/ -------------------------------------------------------------
-const dated = walk(`${EVALS}/results`).filter((rel) => isRealDate(path.posix.basename(rel, '.md')));
+const resultMd = walk(`${EVALS}/results`);
+const dated = resultMd.filter((rel) => isRealDate(path.posix.basename(rel, '.md')));
+const undated = resultMd.filter((rel) => !dated.includes(rel));
 let headings = 0;
 const verdictTotals = { PASS: 0, PARTIAL: 0, FAIL: 0 };
 const fullSuite = [];
@@ -86,6 +90,14 @@ const runsInRows = api.evals.reduce((n, e) => n + e.runs.length, 0);
 record('suite.runs = sum of per-eval runs', api.suite.runs === runsInRows, `${api.suite.runs} / ${runsInRows}`);
 
 const listComplete = api.problemCount <= EVAL_PROBLEM_LIMIT;
+const problemsOf = (reason) => api.problems.filter((p) => p.reason === reason);
+record(
+  'bad-filename problems = undated *.md on disk',
+  listComplete && problemsOf('bad-filename').length === undated.length,
+  listComplete
+    ? `${problemsOf('bad-filename').length} reported / ${undated.length} on disk`
+    : `problem list capped at ${EVAL_PROBLEM_LIMIT} of ${api.problemCount}; cannot recount`
+);
 const malformed = api.problems.filter((p) => p.reason === 'malformed-heading').length;
 record(
   'runs + malformed headings = "## " lines outside fences',
@@ -117,10 +129,13 @@ record(
 // ---- cases/ ---------------------------------------------------------------
 const caseFiles = walk(`${EVALS}/cases`);
 const casePaths = new Set(api.evals.filter((e) => e.case).map((e) => e.case.path));
+const duplicatePaths = new Set(problemsOf('duplicate-case-id').map((p) => p.path));
 record(
-  'every case file on disk is represented',
-  api.suite.cases === caseFiles.length && caseFiles.every((p) => casePaths.has(p)),
-  `${api.suite.cases} reported / ${caseFiles.length} on disk`
+  'every case file on disk is a case or a surfaced duplicate id',
+  listComplete &&
+    api.suite.cases + duplicatePaths.size === caseFiles.length &&
+    caseFiles.every((p) => casePaths.has(p) || duplicatePaths.has(p)),
+  `${api.suite.cases} cases + ${duplicatePaths.size} duplicate ids / ${caseFiles.length} on disk`
 );
 
 const withRuns = new Set(api.evals.filter((e) => e.runs.length).map((e) => e.id));
@@ -133,7 +148,8 @@ record(
 const verdictsClosed = api.evals.every((e) => e.runs.every((r) => r.verdict in apiTotals));
 record('every verdict is PASS | PARTIAL | FAIL', verdictsClosed);
 
-record('format problems (memory-repo lint check 9)', true, `${api.problemCount}`);
+// Information, not an assertion: lint itself is the format gate.
+console.log(`– problems on record: ${api.problemCount}`);
 console.log(
   `  suite: ${api.suite.cases} cases · ${api.suite.resultFiles} result files · ${api.suite.runs} runs · ` +
     `${api.suite.neverFullSuite ? 'no full-suite run recorded' : `last full suite ${api.suite.ageDays} days old`}${api.suite.due ? ' (due)' : ''}`

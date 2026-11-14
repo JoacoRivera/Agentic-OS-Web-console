@@ -1668,6 +1668,7 @@ svg.growth {
 .eval-verdict.v-fail, .eval-mark.v-fail { color: var(--accent-2); }
 .eval-counts { color: var(--dim); white-space: nowrap; }
 .eval-never { color: var(--dim); font-style: italic; }
+.eval-malformed { color: var(--accent-2); font-style: italic; }
 .eval-strip { display: flex; flex-wrap: wrap; gap: 3px; margin: 0; padding: 0; list-style: none; }
 .eval-mark { min-width: 16px; padding: 1px 3px; border: 1px solid currentColor; border-radius: 4px;
   font-size: 10px; line-height: 1.3; text-align: center; cursor: default; }

@@ -169,8 +169,13 @@ on the executable allowlist. `server/src/evals.js` mirrors memory-repo lint
   *due* at 28 days or more, or when no full-suite run exists. Case id = the first
   `id: eval-…` in the case page, else `eval-<stem>`.
 
-Response: `evals[]` (union of case ids and run ids, sorted) with `case`, `lastRunDate`,
-`latest`, `counts`, and `runs` newest first (file date descending, then file order —
+Two case pages declaring the same id keep the first (path order) as the case; the other is
+surfaced as a `duplicate-case-id` problem (lint has no rule against it).
+
+Response: `evals[]` (union of case ids and run ids, sorted) with `case`, `everRun` (check
+23's loose match — a case whose headings are all malformed is run but has no well-formed
+record, and the view says so instead of "never run"), `lastRunDate`, `latest`, `counts`,
+and `runs` newest first (file date descending, then file order —
 `orderNote` says so); `suite` with `cases`, `resultFiles`, `runs`, `lastRunDate`,
 `fullSuiteDates`, `lastFullSuiteDate`, `neverFullSuite`, `ageDays`, `dueDays`, `due`,
 `neverRun`, `withoutCase` (ids with runs but no case page); `problemCount` and up to 20
@@ -178,10 +183,14 @@ Response: `evals[]` (union of case ids and run ids, sorted) with `case`, `lastRu
 view links each run and case page into Documentation.
 
 Known divergences from lint: the filename date must be literally `YYYY-MM-DD` (Python's
-`date.fromisoformat` also accepts basic/week forms), and lines split on `\r\n|\r|\n`.
+`date.fromisoformat` also accepts basic/week forms), lines split on `\r\n|\r|\n`, and
+symlinked files and directories are not followed (lint's `rglob` reads symlinked files).
 
-`npm run check:evals` recounts `wiki/workflows/evals/` with its own walk and plain
-line-prefix counting, and exits non-zero on any mismatch. With no `evals/` directory it
+`npm run check:evals` recounts `wiki/workflows/evals/` with its own walk (symlinks skipped,
+as above) and plain line-prefix counting — result files, `bad-filename` problems, `## `
+headings, verdict totals, case files (cases + `duplicate-case-id` problems), last
+full-suite run — and exits non-zero on any mismatch. The total problem count is printed as
+information only: lint itself is the format gate. With no `evals/` directory it
 passes with zeros.
 
 ## Family Health (`GET /api/family-health/*`, ADR-0010)

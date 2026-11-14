@@ -244,8 +244,39 @@ test('suite: no full-suite run is due (check 23); case id fallback; malformed he
   assert.equal(out.suite.due, true);
   assert.deepEqual(out.suite.neverRun, ['eval-b-case']);
   assert.deepEqual(out.suite.withoutCase, []);
-  // eval-c heads only a malformed block: listed (it has a case) with no runs.
-  assert.deepEqual(out.evals.find((e) => e.id === 'eval-c').runs, []);
+  // eval-c heads only a malformed block: listed (it has a case) with no
+  // well-formed run, yet ever-run as check 23 counts it — never "never run".
+  const c = out.evals.find((e) => e.id === 'eval-c');
+  assert.deepEqual(c.runs, []);
+  assert.equal(c.everRun, true);
+  assert.equal(out.evals.find((e) => e.id === 'eval-b-case').everRun, false);
+  assert.equal(out.evals.find((e) => e.id === 'eval-a').everRun, true);
+});
+
+test('a duplicate case id keeps the first page and surfaces the other as a problem', async () => {
+  const r = await makeRepo({
+    [`${C}/a.md`]: CASE('eval-a', 'deterministic', 'A'),
+    [`${C}/a-copy.md`]: CASE('eval-a', 'judgment', 'A copy'),
+    [`${C}/b.md`]: CASE('eval-b', 'mixed', 'B'),
+  });
+  roots.push(r);
+  const out = await listEvals(createConfig({ REPO_ROOT: r }), NOW);
+  assert.equal(out.suite.cases, 2);
+  // Path order: a-copy.md sorts before a.md, so it is the case; a.md is surfaced.
+  assert.equal(out.evals.find((e) => e.id === 'eval-a').case.path, `${C}/a-copy.md`);
+  assert.deepEqual(out.problems, [{ path: `${C}/a.md`, line: null, reason: 'duplicate-case-id' }]);
+});
+
+test('symlinked result files are not followed (documented divergence from lint rglob)', async () => {
+  const r = await makeRepo({
+    'elsewhere/2026-01-01.md': RESULT('2026-01-01', `## eval-a — PASS\n${FIELDS()}`),
+    [`${R}/2026-01-02.md`]: RESULT('2026-01-02', `## eval-a — PASS\n${FIELDS()}`),
+  });
+  roots.push(r);
+  await fs.symlink(path.join(r, 'elsewhere/2026-01-01.md'), path.join(r, R, '2026-01-01.md'));
+  const out = await listEvals(createConfig({ REPO_ROOT: r }), NOW);
+  assert.equal(out.suite.resultFiles, 1);
+  assert.deepEqual(out.evals[0].runs.map((x) => x.date), ['2026-01-02']);
 });
 
 test('problems capped with an exact count, never carrying file text', async () => {

@@ -25,6 +25,7 @@ const payload = {
     {
       id: 'eval-beta',
       case: { path: 'wiki/workflows/evals/cases/beta.md', title: 'Eval — Beta', type: 'judgment' },
+      everRun: true,
       lastRunDate: '2026-02-07',
       latest: { verdict: 'PASS', date: '2026-02-07' },
       counts: { PASS: 1, PARTIAL: 1, FAIL: 1 },
@@ -38,6 +39,7 @@ const payload = {
     {
       id: 'eval-gamma',
       case: { path: 'wiki/workflows/evals/cases/gamma.md', title: 'Eval — Gamma', type: 'mixed' },
+      everRun: false,
       lastRunDate: null,
       latest: null,
       counts: { PASS: 0, PARTIAL: 0, FAIL: 0 },
@@ -46,10 +48,21 @@ const payload = {
     {
       id: 'eval-retired',
       case: null,
+      everRun: true,
       lastRunDate: '2026-01-10',
       latest: { verdict: 'PASS', date: '2026-01-10' },
       counts: { PASS: 1, PARTIAL: 0, FAIL: 0 },
       runs: [run('2026-01-10', 'PASS', 30, { subject: 'fixture A only', type: 'mixed' })],
+    },
+    {
+      // Its only heading is malformed: lint check 23 counts it as run.
+      id: 'eval-delta',
+      case: { path: 'wiki/workflows/evals/cases/delta.md', title: 'Eval — Delta', type: 'mixed' },
+      everRun: true,
+      lastRunDate: null,
+      latest: null,
+      counts: { PASS: 0, PARTIAL: 0, FAIL: 0 },
+      runs: [],
     },
   ],
   suite: {
@@ -95,11 +108,28 @@ describe('EvalsView', () => {
     expect(screen.getByText('Runs recorded but no case page:').parentElement).toHaveTextContent('eval-retired');
     expect(within(screen.getByRole('list', { name: 'format problems' })).getByText(/notes\.md — bad-filename/)).toBeInTheDocument();
 
-    for (const id of ['eval-beta', 'eval-gamma', 'eval-retired']) {
+    for (const id of ['eval-beta', 'eval-gamma', 'eval-retired', 'eval-delta']) {
       expect(screen.getByRole('button', { name: id })).toBeInTheDocument();
     }
     const gammaRow = screen.getByRole('button', { name: 'eval-gamma' }).closest('tr');
     expect(within(gammaRow).getAllByText('never run').length).toBeGreaterThan(0);
+  });
+
+  test('a case with only malformed headings is not shown as never run (lint check 23)', async () => {
+    const user = userEvent.setup();
+    stubFetch({ ok: true, status: 200, json: async () => payload });
+    render(<EvalsView onOpenDoc={() => {}} />);
+
+    const toggle = await screen.findByRole('button', { name: 'eval-delta' });
+    const row = toggle.closest('tr');
+    expect(within(row).queryByText('never run')).not.toBeInTheDocument();
+    expect(within(row).getAllByText('no well-formed record — see format problems')).toHaveLength(2);
+    expect(screen.getByText('Cases never run:').parentElement).not.toHaveTextContent('eval-delta');
+
+    await user.click(toggle);
+    const detail = row.nextElementSibling;
+    expect(within(detail).getByText('no well-formed record — see format problems')).toBeInTheDocument();
+    expect(within(detail).queryByText('never run')).not.toBeInTheDocument();
   });
 
   test('history strip: one labelled mark per run, oldest → newest, readable without colour', async () => {

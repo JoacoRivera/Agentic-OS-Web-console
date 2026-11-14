@@ -10,6 +10,19 @@ import { ExternalLink } from 'lucide-react';
 
 const MARK = { PASS: 'P', PARTIAL: '~', FAIL: 'F' };
 
+/**
+ * No well-formed record: "never run" only when lint check 23 agrees. A case
+ * whose headings are all malformed counts as run there (`everRun`), so the
+ * row points at the format problems instead of contradicting the suite panel.
+ */
+function NoRecord({ everRun }) {
+  return everRun ? (
+    <span className="eval-malformed">no well-formed record — see format problems</span>
+  ) : (
+    <span className="eval-never">never run</span>
+  );
+}
+
 function describeRun(run) {
   const parts = [run.date, run.verdict];
   if (run.subject) parts.push(`subject: ${run.subject}`);
@@ -21,8 +34,8 @@ function Verdict({ verdict }) {
   return <span className={`eval-verdict v-${verdict.toLowerCase()}`}>{verdict}</span>;
 }
 
-function HistoryStrip({ id, runs }) {
-  if (runs.length === 0) return <span className="eval-never">never run</span>;
+function HistoryStrip({ id, runs, everRun }) {
+  if (runs.length === 0) return <NoRecord everRun={everRun} />;
   const oldestFirst = [...runs].reverse();
   return (
     <ol className="eval-strip" aria-label={`${id} recorded verdicts, oldest to newest`}>
@@ -109,7 +122,9 @@ function RunList({ entry, onOpenDoc }) {
         </div>
       )}
       {entry.runs.length === 0 ? (
-        <div className="eval-never">never run</div>
+        <div>
+          <NoRecord everRun={entry.everRun} />
+        </div>
       ) : (
         <ul aria-label={`${entry.id} recorded runs, latest record first`}>
           {entry.runs.map((run) => (
@@ -176,13 +191,13 @@ export default function EvalHistory({ data, onOpenDoc }) {
                         </button>
                       </td>
                       <td className="wf-kind">{entry.case ? (entry.case.type ?? '—') : 'no case page'}</td>
-                      <td>{entry.lastRunDate ?? <span className="eval-never">never run</span>}</td>
+                      <td>{entry.lastRunDate ?? <NoRecord everRun={entry.everRun} />}</td>
                       <td>{entry.latest ? <Verdict verdict={entry.latest.verdict} /> : '—'}</td>
                       <td className="eval-counts">
                         {entry.counts.PASS} · {entry.counts.PARTIAL} · {entry.counts.FAIL}
                       </td>
                       <td>
-                        <HistoryStrip id={entry.id} runs={entry.runs} />
+                        <HistoryStrip id={entry.id} runs={entry.runs} everRun={entry.everRun} />
                       </td>
                     </tr>
                     {expanded && (

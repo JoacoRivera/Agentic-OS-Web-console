@@ -16,7 +16,8 @@ import path from 'node:path';
  * Known divergences: the filename date must be literally YYYY-MM-DD (Python's
  * `date.fromisoformat` also accepts basic/week forms; lint's own message asks
  * for YYYY-MM-DD.md); lines split on \r\n|\r|\n (Python `splitlines()` also
- * splits on a few rarer separators).
+ * splits on a few rarer separators); symlinked files and directories are not
+ * followed (lint's `rglob` reads symlinked files).
  *
  * Invalid data is excluded and surfaced as `{path, line, reason}` problems —
  * never guessed, never carrying file text.
@@ -236,7 +237,10 @@ export async function listEvals(config, now = new Date()) {
   for (const relPath of casePaths) {
     const text = await fs.readFile(path.join(config.REPO_ROOT, relPath), 'utf8');
     const parsed = parseCaseFile(relPath, text);
-    if (!cases.has(parsed.id)) cases.set(parsed.id, parsed);
+    // Lint has no rule against two pages sharing an id; the first page (path
+    // order) is the case, the other is surfaced, not silently dropped.
+    if (cases.has(parsed.id)) problems.push({ path: relPath, line: null, reason: 'duplicate-case-id' });
+    else cases.set(parsed.id, parsed);
   }
 
   // Newest first: file date descending, then position in file ascending.
@@ -256,6 +260,9 @@ export async function listEvals(config, now = new Date()) {
     return {
       id,
       case: kase ? { path: kase.path, title: kase.title, type: kase.type } : null,
+      // Check 23's loose "ever run": true even when every heading for this
+      // id is malformed (then `runs` is empty but the case is not never-run).
+      everRun: looseIds.has(id),
       lastRunDate: runs[0]?.date ?? null,
       latest: runs[0] ? { verdict: runs[0].verdict, date: runs[0].date } : null,
       counts,
