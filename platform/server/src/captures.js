@@ -56,7 +56,7 @@ export function isLogFile(relPath) {
 }
 
 /** A real ISO calendar day (what `date.fromisoformat` accepts for this shape). */
-function validDay(text) {
+export function validDay(text) {
   const [y, m, d] = text.split('-').map(Number);
   const parsed = new Date(Date.UTC(y, m - 1, d));
   return parsed.getUTCFullYear() === y && parsed.getUTCMonth() === m - 1 && parsed.getUTCDate() === d;
@@ -140,7 +140,7 @@ const STATUS_RE = /^Status:(.*)$/gm;
 // A raw/ path with allowlisted boundaries on both sides (see inventory.py:
 // a denylist admits `raw/t/a.md.bak` as proof for `raw/t/a.md`). `\w` is
 // Python's Unicode word class: letters, numbers, underscore.
-const RAW_PATH_RE =
+export const RAW_PATH_RE =
   /(?:^|(?<=[\s(\[`"',])|(?<=\.\.\/)|(?<=\.\/))raw\/[\p{L}\p{N}_./-]+?\.md(?:(?=[\s)\]`"',;:])|(?=\.(?:\s|$))|(?=$))/gmu;
 
 /** Template scope test on repo-relative parts only. */
@@ -308,7 +308,7 @@ export async function classifyCaptures(repoRoot, rawPaths, wikiPaths, entries) {
     }
   }
 
-  return { buckets, firstIngest };
+  return { buckets, firstIngest, texts };
 }
 
 /**

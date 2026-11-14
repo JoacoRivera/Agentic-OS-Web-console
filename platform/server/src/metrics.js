@@ -10,6 +10,7 @@ import {
   lastMaintenancePass,
   readLogEntries,
 } from './captures.js';
+import { computeFlow } from './flow.js';
 
 /**
  * Canonical memory metrics (ADR-0002): a live filesystem scan. Scalar file
@@ -386,7 +387,7 @@ export async function computeMetrics(config, now = new Date()) {
   // Same classification as the memory repo's capture inventory: no triage, no
   // approval — a Draft waits only for /aos-ingest. rawN never drains (ADR-0003).
   const logEntries = await readLogEntries(repoRoot);
-  const { buckets, firstIngest } = await classifyCaptures(
+  const { buckets, firstIngest, texts } = await classifyCaptures(
     repoRoot,
     byRoot.raw.map((p) => p.path),
     byRoot.wiki.map((p) => p.path),
@@ -505,6 +506,8 @@ export async function computeMetrics(config, now = new Date()) {
       overdueDays: MAINTENANCE_OVERDUE_DAYS,
       ingestedSincePass: ingestedSincePass(buckets, firstIngest, logEntries, pass),
     },
+    // Memory-flow stats (ADR-0003 amendment 2026-11-14, mirrors memory-stats.py).
+    flow: computeFlow({ buckets, texts, entries: logEntries, today: isoDay(dayStartMs(now)) }),
     trend: weekTotal > 0 ? 'ACTIVE' : 'IDLE',
     generatedAt: now.toISOString(),
   };

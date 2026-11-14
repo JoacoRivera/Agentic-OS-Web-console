@@ -133,7 +133,9 @@ try {
       ['wikiN', 'rawN', 'all', 'capN', 'draftN', 'heldN', 'ingestedN', 'weekTotal', 'trend'].every((f) => f in metBody) &&
       metBody.series?.length === 30 &&
       metBody.week?.length === 7 &&
-      'healthStale' in (metBody.health ?? {})
+      'healthStale' in (metBody.health ?? {}) &&
+      ['captures', 'latency', 'passes', 'queue'].every((f) => f in (metBody.flow ?? {})) &&
+      Array.isArray(metBody.flow?.months)
   );
 
   const tree = await req(port, { reqPath: '/api/docs/tree' });
