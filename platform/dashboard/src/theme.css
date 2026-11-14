@@ -1433,7 +1433,7 @@ svg.growth {
   font-size: 10px;
 }
 
-/* ---- memory query (deterministic wiki tag recall) ---- */
+/* ---- memory query (deterministic recall: BM25F by question, then tags) ---- */
 
 .mq-search-box {
   margin-bottom: 14px;
@@ -1453,6 +1453,38 @@ svg.growth {
 .mq-tag-chip:hover {
   border-color: var(--accent);
   color: var(--text);
+}
+
+.mq-history-toggle {
+  margin-bottom: 12px;
+}
+
+.mq-count {
+  margin: 4px 0 8px;
+}
+
+.mq-score {
+  margin-left: auto;
+  color: var(--accent);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.mq-history-chip {
+  color: var(--dim);
+}
+
+.mq-show-all {
+  margin: 6px 0 4px;
+}
+
+.mq-tag-recall {
+  margin-top: 16px;
+}
+
+.mq-tag-recall > summary {
+  cursor: pointer;
+  margin-bottom: 4px;
 }
 
 .mq-handoff {
