@@ -318,6 +318,27 @@ try {
     'unknown run ids are 404 on the snapshot and SSE routes',
     runUnknown.status === 404 && sseUnknown.status === 404
   );
+
+  // ADR-0001 amendment (2026-11-14): the allowlist is exactly seven ids, the
+  // seventh being check:wiki-structure; its dry-run names the fixed npm
+  // wrapper; the Maintenance read answers with the card and a lastRun key.
+  record(
+    'the executable allowlist is exactly the seven ADR-0001 entries',
+    ops.status === 200 &&
+      JSON.stringify(opsBody.allowlist) ===
+        JSON.stringify(['verify', 'check:paths', 'check:docs', 'check:workflows', 'check:skills', 'check:metrics-groundtruth', 'check:wiki-structure'])
+  );
+  const wsDry = await req(port, { method: 'POST', reqPath: '/api/operations/check%3Awiki-structure/dry-run' });
+  record(
+    'check:wiki-structure dry-run shows npm run check:wiki-structure (nothing executed)',
+    wsDry.status === 200 && JSON.parse(wsDry.body).command === 'npm run check:wiki-structure'
+  );
+  const ws = await req(port, { reqPath: '/api/maintenance/wiki-structure' });
+  const wsBody = ws.status === 200 ? JSON.parse(ws.body) : {};
+  record(
+    '/api/maintenance/wiki-structure answers 200 with the operation card and a lastRun key',
+    ws.status === 200 && wsBody.operation?.id === 'check:wiki-structure' && 'lastRun' in wsBody
+  );
 } catch (err) {
   record('server boots and reports listening', false, err.message);
 } finally {
