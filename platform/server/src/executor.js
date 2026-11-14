@@ -28,8 +28,10 @@ const PLATFORM_DIR = path.resolve(__dirname, '../..');
  *   a `git diff` when anything changed — the allowlisted checks are
  *   read-only, so a non-empty diff is itself a finding worth surfacing.
  * - Every run appends one JSON line (op, ts, status, files, output) to the
- *   audit log at completion, success or failure — same shape as the
- *   synchronous era.
+ *   audit log, success or failure — same shape as the synchronous era. The
+ *   line is written *before* the run is reported finished: status,
+ *   finishedAt, the single-flight release and the `done` event are published
+ *   together only once the append has settled.
  * - An id with a result parser (today only `check:wiki-structure`, ADR-0001
  *   amendment 2026-11-14) also gets a structured `result`, parsed from the
  *   FULL stdout before the audit tail cap and stored additively on the
@@ -88,13 +90,19 @@ function gitCapture(repoRoot, args) {
 }
 
 /**
- * Build the executor. `commands`, `timeoutMs` and `resultParsers` are test
- * seams — production callers take the defaults, so the table always mirrors
- * the allowlist.
+ * Build the executor. `commands`, `timeoutMs`, `appendAudit` and
+ * `resultParsers` are test seams — production callers take the defaults, so
+ * the table always mirrors the allowlist and every run is audited through
+ * appendAuditEntry.
  */
 export function createExecutor(
   config,
-  { commands = defaultCommands(), timeoutMs = RUN_TIMEOUT_MS, resultParsers = RESULT_PARSERS } = {}
+  {
+    commands = defaultCommands(),
+    timeoutMs = RUN_TIMEOUT_MS,
+    appendAudit = appendAuditEntry,
+    resultParsers = RESULT_PARSERS,
+  } = {}
 ) {
   const tokens = new Map(); // token → { id, expiresAt }
   const jobs = new Map(); // runId → job (insertion order = start order)
@@ -166,6 +174,7 @@ export function createExecutor(
 
   /** The actual execution — runs detached from the HTTP request. */
   async function execute(job, argv) {
+    let finalStatus;
     try {
       const statusBefore = await gitCapture(config.REPO_ROOT, ['status', '--porcelain']);
       const t0 = Date.now();
@@ -213,21 +222,25 @@ export function createExecutor(
 
       job.exitCode = result.exitCode;
       job.durationMs = Date.now() - t0;
-      job.status = result.timedOut ? 'timeout' : result.exitCode === 0 ? 'ok' : 'failed';
+      finalStatus = result.timedOut ? 'timeout' : result.exitCode === 0 ? 'ok' : 'failed';
     } catch (err) {
       job.stderr += `\nexecutor error: ${err.message}`;
-      job.status = 'failed';
+      finalStatus = 'failed';
       job.durationMs = job.durationMs ?? 0;
     } finally {
-      job.finishedAt = new Date().toISOString();
-      running = null;
+      // When the command finished — not when the audit line landed.
+      const finishedAt = new Date().toISOString();
+      // Parsed before the append so the audit line carries it; the job stays
+      // `running` until then, so nobody sees a result without its status.
       job.result = parseResult(resultParsers, job.op, job.stdout, job.exitCode);
-      // Audit at completion — same line shape as the synchronous era.
+      // Audit first, same line shape as the synchronous era. The job stays
+      // `running` (and single-flight held) until the append has settled, so
+      // anyone who sees a finished run can read its audit line.
       try {
-        await appendAuditEntry(config, {
+        await appendAudit(config, {
           ts: job.ts,
           op: job.op,
-          status: job.status,
+          status: finalStatus,
           exitCode: job.exitCode,
           durationMs: job.durationMs,
           command: job.command,
@@ -241,6 +254,10 @@ export function createExecutor(
       } catch (err) {
         job.stderr += `\naudit append failed: ${err.message}`;
       }
+      // Publish the terminal state in one synchronous block — no await below.
+      job.status = finalStatus;
+      job.finishedAt = finishedAt;
+      running = null;
       emit(job, { type: 'done', snapshot: snapshot(job) });
       job.listeners.clear();
       pruneJobs();

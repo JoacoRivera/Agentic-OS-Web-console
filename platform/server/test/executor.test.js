@@ -7,6 +7,7 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { createConfig } from '../src/config.js';
 import { createExecutor } from '../src/executor.js';
+import { appendAuditEntry } from '../src/audit.js';
 import { EXECUTABLE_ALLOWLIST } from '../src/operations.js';
 
 /**
@@ -194,7 +195,7 @@ test('the default command table is exactly `npm run <id>` for the allowlist', as
   );
 });
 
-/** Read the audit lines, waiting out the append that lands just after `done`. */
+/** Read the audit lines (bounded wait; since i01 the line is written before `done`). */
 async function readAudit(config, minLines = 1) {
   const deadline = Date.now() + 3000;
   for (;;) {
@@ -315,4 +316,154 @@ test('GET /api/maintenance/wiki-structure sits behind the Host/Origin guard', as
   assert.equal(badHost.status, 403);
   const badOrigin = await get(app, '/api/maintenance/wiki-structure').set('Origin', 'http://evil.example');
   assert.equal(badOrigin.status, 403);
+});
+
+/*
+ * Ordering: a run is reported finished (status, finishedAt, released
+ * single-flight, `done`) only after its audit append has settled. These drive
+ * the executor directly with a gated `appendAudit` seam — no timing involved.
+ */
+
+async function makeExecutor(commands, appendAudit) {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'aos-exec-'));
+  const config = createConfig({
+    REPO_ROOT: dir,
+    AUDIT_LOG_PATH: path.join(dir, 'logs', 'operations.log'),
+  });
+  return { executor: createExecutor(config, { commands, timeoutMs: 5000, appendAudit }), config };
+}
+
+/** An appendAudit seam that holds every append until release() is called. */
+function gatedAudit() {
+  let enter;
+  let release;
+  const entered = new Promise((r) => (enter = r));
+  const gate = new Promise((r) => (release = r));
+  const appendAudit = async (config, entry) => {
+    enter(entry);
+    await gate;
+    return appendAuditEntry(config, entry);
+  };
+  return { appendAudit, entered, release };
+}
+
+/** Start a run and collect its events; `done` resolves with the done event. */
+function startRun(executor, id) {
+  const { confirmToken } = executor.dryRun(id);
+  const first = executor.run(id, { confirm: true, confirmToken });
+  const events = [];
+  let resolveDone;
+  const done = new Promise((r) => (resolveDone = r));
+  executor.subscribe(first.runId, (event) => {
+    events.push(event);
+    if (event.type === 'done') resolveDone(event);
+  });
+  return { runId: first.runId, events, done };
+}
+
+const exists = (p) =>
+  fs.access(p).then(
+    () => true,
+    () => false
+  );
+
+test('a run is not reported finished until its audit line is written', async () => {
+  const gated = gatedAudit();
+  const { executor, config } = await makeExecutor(
+    { 'check:paths': [node, '-e', 'console.log("ok")'] },
+    gated.appendAudit
+  );
+
+  const run = startRun(executor, 'check:paths');
+  const entry = await gated.entered;
+  assert.equal(entry.status, 'ok');
+
+  // The append is held: nothing may look finished yet.
+  const held = executor.getRun(run.runId);
+  assert.equal(held.status, 'running');
+  assert.equal(held.finishedAt, null);
+  assert.ok(!run.events.some((e) => e.type === 'done'));
+  assert.equal(await exists(config.AUDIT_LOG_PATH), false);
+  const { confirmToken } = executor.dryRun('check:paths');
+  assert.throws(
+    () => executor.run('check:paths', { confirm: true, confirmToken }),
+    (err) => err.status === 409 && err.code === 'run-in-flight'
+  );
+
+  gated.release();
+  const done = await run.done;
+  assert.equal(done.snapshot.status, 'ok');
+  const finished = executor.getRun(run.runId);
+  assert.equal(finished.status, 'ok');
+  assert.ok(finished.finishedAt);
+  const lines = (await fs.readFile(config.AUDIT_LOG_PATH, 'utf8')).trim().split('\n');
+  assert.equal(lines.length, 1);
+  assert.equal(JSON.parse(lines[0]).status, done.snapshot.status);
+
+  // Single-flight is released: a new run is accepted (and drained).
+  const next = startRun(executor, 'check:paths');
+  assert.equal((await next.done).snapshot.status, 'ok');
+});
+
+test('a failing run stays running until its failed audit line is written', async () => {
+  const gated = gatedAudit();
+  const { executor } = await makeExecutor(
+    { 'check:docs': [node, '-e', 'process.exit(2)'] },
+    gated.appendAudit
+  );
+
+  const run = startRun(executor, 'check:docs');
+  const entry = await gated.entered;
+  assert.equal(entry.status, 'failed');
+  assert.equal(entry.exitCode, 2);
+  assert.equal(executor.getRun(run.runId).status, 'running');
+
+  gated.release();
+  assert.equal((await run.done).snapshot.status, 'failed');
+  assert.equal(executor.getRun(run.runId).status, 'failed');
+});
+
+test('a failed audit append still finishes the run and says so', async () => {
+  const { executor } = await makeExecutor({ 'check:paths': [node, '-e', ''] }, async () => {
+    throw new Error('disk full');
+  });
+
+  const run = startRun(executor, 'check:paths');
+  await run.done;
+  const finished = executor.getRun(run.runId);
+  assert.equal(finished.status, 'ok');
+  assert.ok(finished.finishedAt);
+  assert.ok(finished.stderr.includes('audit append failed: disk full'));
+
+  const next = startRun(executor, 'check:paths');
+  assert.equal((await next.done).snapshot.status, 'ok');
+});
+
+test('a gated audit append holds a wiki-structure run running; the result lands on the audit line and the terminal snapshot together', async () => {
+  const gated = gatedAudit();
+  const report = '## Deterministic wiki lint\n- errors: 1\n- warnings: 0\nERROR   wiki/example/page.md: broken link\n';
+  const { executor, config } = await makeExecutor(
+    { 'check:wiki-structure': [node, '-e', `process.stdout.write(${JSON.stringify(report)}); process.exit(1)`] },
+    gated.appendAudit
+  );
+  const run = startRun(executor, 'check:wiki-structure');
+
+  // The command has exited and the append is waiting at the gate.
+  const entry = await gated.entered;
+  assert.equal(entry.result.parsed, true);
+  assert.equal(entry.result.errors, 1);
+  const held = executor.getRun(run.runId);
+  assert.equal(held.status, 'running', 'still running while the audit append is gated');
+  assert.equal(held.finishedAt, null);
+  assert.equal(await exists(config.AUDIT_LOG_PATH), false);
+
+  gated.release();
+  const done = await run.done;
+  assert.equal(done.snapshot.status, 'failed');
+  assert.equal(done.snapshot.exitCode, 1);
+  assert.deepEqual(done.snapshot.result, entry.result);
+  const [line] = (await fs.readFile(config.AUDIT_LOG_PATH, 'utf8')).split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  assert.equal(line.status, 'failed');
+  assert.deepEqual(line.result, done.snapshot.result);
+  assert.deepEqual(executor.getRun(run.runId).result, line.result);
 });
