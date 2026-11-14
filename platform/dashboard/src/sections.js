@@ -12,6 +12,7 @@ import {
   BrainCircuit,
   Users,
   Wallet,
+  FlaskConical,
 } from 'lucide-react';
 
 /**
@@ -22,6 +23,7 @@ export const SECTIONS = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard, phase: 1 },
   { id: 'documentation', label: 'Documentation', icon: BookOpen, phase: 1 },
   { id: 'workflows', label: 'Workflows', icon: Workflow, phase: 1 },
+  { id: 'evals', label: 'Evals', icon: FlaskConical, phase: 1 },
   { id: 'skills', label: 'Skills', icon: Sparkles, phase: 1 },
   { id: 'memory-query', label: 'Memory Query', icon: BrainCircuit, phase: 1 },
   { id: 'review-queue', label: 'Ingest Queue', icon: Inbox, phase: 1 },

@@ -5,6 +5,7 @@ import OverviewView from './views/OverviewView.jsx';
 import DocsView from './views/DocsView.jsx';
 import WorkflowsView from './views/WorkflowsView.jsx';
 import SkillsView from './views/SkillsView.jsx';
+import EvalsView from './views/EvalsView.jsx';
 import OperationsView from './views/OperationsView.jsx';
 import AuditLogView from './views/AuditLogView.jsx';
 import PlaceholderView from './views/PlaceholderView.jsx';
@@ -86,6 +87,16 @@ export default function App() {
   } else if (sectionId === 'skills') {
     view = (
       <SkillsView
+        refreshKey={manualRefreshKey}
+        onOpenDoc={(path) => {
+          setDocRequest({ path, key: Date.now() });
+          setSectionId('documentation');
+        }}
+      />
+    );
+  } else if (sectionId === 'evals') {
+    view = (
+      <EvalsView
         refreshKey={manualRefreshKey}
         onOpenDoc={(path) => {
           setDocRequest({ path, key: Date.now() });
