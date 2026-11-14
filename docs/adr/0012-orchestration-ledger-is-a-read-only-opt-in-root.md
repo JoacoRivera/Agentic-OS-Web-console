@@ -2,6 +2,12 @@
 
 Status: proposed — 2026-11-14 (DRAFT; not accepted, nothing here is implemented)
 
+**Deferred by owner decision — 2026-11-14.** This draft stays `proposed` and nothing is
+implemented. Reason: the ledger home holds a one-day development/test corpus that the
+memory repo ruled ineligible for routing-quality claims, and the ledger has no supported
+read API. Revisit when the ledger holds real orchestration Episodes, or when the memory
+repo offers a supported read interface.
+
 ## Context
 
 The Agentic OS memory repo carries an orchestration layer: `aos implement`
