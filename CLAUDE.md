@@ -157,7 +157,8 @@ Avoid the words "command"/"tool"/"task"/"runbook" as synonyms for these — the 
 ## Phasing
 
 - **Phase 1** (ship target) — read-only console: metrics, maintenance-pass health, ingest queue, Docs
-  explorer/search/backlinks, Workflow registry+checks, Skill registry, Odysseus visual shell.
+  explorer/search/backlinks, Workflow registry+checks, Skill registry, Evals view (read-only),
+  Odysseus visual shell.
 - **Phase 2** — Guided Operations (checklists + command previews, copy, no execution).
 - **Phase 3** — controlled execution: executable allowlist + dry-run + confirm + diff +
   audit log. Shipped: `POST /api/operations/:id/run` executes an allowlisted id after a
