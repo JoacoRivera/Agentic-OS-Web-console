@@ -202,6 +202,30 @@ skill or workflow but is neither. Two strict subtypes:
   no arbitrary shell, no headless Claude. (e.g. `npm run check:paths`.)
 _Avoid_: command, action (use "Operation"), task
 
+### Evals (recorded verdicts, read-only)
+
+**Eval**:
+A case of the memory repo's eval suite, from `wiki/workflows/evals/cases/*.md`, identified
+by its `id: eval-<slug>` (else `eval-<file stem>`, as memory-repo lint check 23 does). The
+suite itself is the `eval-suite` Workflow `wiki/workflows/evals.md`. An Eval is run and
+judged by a human or LLM outside the console — **the console never runs or judges an
+eval** (ADR-0001); it shows what was recorded.
+_Avoid_: test, check (a `check:*` is a deterministic console script), score
+
+**Eval result** (run record):
+One `## eval-<slug> — <Verdict>` block in a dated `wiki/workflows/evals/results/YYYY-MM-DD.md`
+file, in the format memory-repo lint check 9 enforces (two optional parenthesised
+qualifiers: a subject after the slug, a note after the verdict). Runs carry a date, not a
+time; within a file the newest record comes first by convention. A malformed file or
+heading is excluded and surfaced as a `{path, line, reason}` problem, never guessed.
+_Avoid_: test run, log entry
+
+**Verdict**:
+The outcome the owner recorded for one Eval result: exactly `PASS`, `PARTIAL` or `FAIL`.
+The console displays verdicts and their history; it computes no health, pass rate or
+regression of its own.
+_Avoid_: score, status (that is the Workflow registry's), grade
+
 ### Family Health (second repo root)
 
 **Family Health record**:
