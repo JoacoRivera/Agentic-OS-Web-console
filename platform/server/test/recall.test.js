@@ -214,3 +214,51 @@ test('the loader follows the reference page rules on the corpus', async () => {
   assert.equal(crlf, lf);
   assert.deepEqual({ ...crlfRest, path: '' }, { ...lfRest, path: '' });
 });
+
+// ---- tags read as written (aos_wiki/frontmatter.tags) ------------------------
+//
+// Tags and rankings below were produced by the real reference on this synthetic tree,
+// written to a temp dir outside the repo (memory repo 1905a94, Python 3.14.4, PyYAML
+// 6.0.3): python3 ~/projects/agentic-os/scripts/wiki_recall.py --root <tmp> --top 100000 "<q>".
+// PyYAML nodes keep every scalar as written; js-yaml's default schema would turn
+// 4.10 into 4.1, 2026-01-01 into a Date and null/~ into null.
+const YAML_EDGE = {
+  'wiki/index.md': '---\ntags: []\n---\n# Index\n',
+  'wiki/notes/numbers.md': '---\ntags: [4.10, 1.0, 2026-01-01]\n---\n# Numbers\n\n> Version-like and date-like tags.\n\nPlain body.\n',
+  'wiki/notes/literals.md': '---\ntags: [true, True, null, ~, 0x1F, 007]\n---\n# Literals\n\n> Boolean- and null-like tags.\n\nPlain body.\n',
+  'wiki/notes/duplicate.md': '---\ntags: [first]\nupdated: 2026-01-02\ntags: [last, 4.10]\n---\n# Duplicate\n\n> A repeated tags key.\n\nPlain body.\n',
+  'wiki/notes/short.md': '---\ntags: [4.1]\n---\n# Short\n\n> A 4.1 tag only.\n\nPlain body.\n',
+};
+const YAML_EDGE_TAGS = {
+  'wiki/notes/duplicate.md': ['last', '4.10'],
+  'wiki/notes/literals.md': ['true', 'True', 'null', '~', '0x1F', '007'],
+  'wiki/notes/numbers.md': ['4.10', '1.0', '2026-01-01'],
+  'wiki/notes/short.md': ['4.1'],
+};
+const YAML_EDGE_RANKED = [
+  { q: '4.10', ranked: [['wiki/notes/duplicate.md', 1], ['wiki/notes/numbers.md', 0.9]] },
+  { q: '1.0', ranked: [['wiki/notes/numbers.md', 1.5]] },
+  { q: '2026-01-01', ranked: [['wiki/notes/numbers.md', 3.4]] },
+  { q: 'true null', ranked: [['wiki/notes/literals.md', 3.9]] },
+  { q: 'first last', ranked: [['wiki/notes/duplicate.md', 1.8]] },
+  { q: '4.1', ranked: [['wiki/notes/short.md', 2.2]] },
+];
+
+test('tags are read as written — versions, dates, booleans, null — and a repeated tags key takes the last', async () => {
+  const edgeRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'recall-yaml-'));
+  try {
+    for (const [rel, text] of Object.entries(YAML_EDGE)) {
+      await fs.mkdir(path.dirname(path.join(edgeRoot, rel)), { recursive: true });
+      await fs.writeFile(path.join(edgeRoot, rel), text);
+    }
+    const pages = await loadWikiPages({ REPO_ROOT: edgeRoot });
+    assert.deepEqual(Object.fromEntries(pages.map((p) => [p.path, p.tags])), YAML_EDGE_TAGS);
+    for (const { q, ranked } of YAML_EDGE_RANKED) {
+      const hits = recall(q, pages).filter((r) => r.score > 0);
+      assert.deepEqual(hits.map((r) => r.page.path), ranked.map(([p]) => p), q);
+      hits.forEach((r, i) => assert.ok(Math.abs(r.score - ranked[i][1]) <= 0.05 + 1e-9, `${q}: ${r.page.path} = ${r.score}`));
+    }
+  } finally {
+    await fs.rm(edgeRoot, { recursive: true, force: true });
+  }
+});

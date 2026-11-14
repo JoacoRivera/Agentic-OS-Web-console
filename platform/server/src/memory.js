@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import matter from 'gray-matter';
+import yaml from 'js-yaml';
 import { recall, tokenize, fullSummary, pageTitle, pyRstrip, pyStrip } from './recall.js';
 
 /**
@@ -50,27 +50,34 @@ function displaySummary(summary) {
 /**
  * `aos_wiki/frontmatter.tags`: the top-level `tags:` list, items stripped,
  * empties dropped, not deduped; no list (a scalar `tags: foo`, a mapping) or
- * invalid YAML → []. A repeated key takes the last one (`json: true` reaches
- * js-yaml through gray-matter's options and stops it throwing on duplicate
- * keys, as PyYAML does not). Known inexactness: the reference reads each item
- * "as written" from PyYAML nodes, js-yaml resolves types — numbers/booleans
- * are coerced back with String() (`1.0` comes back as `1`), and null/date/
- * nested items are dropped. scripts/check-memory-recall.mjs would catch a
- * live page that hits it.
+ * invalid YAML → []. The reference reads each item "as written" from PyYAML
+ * nodes, never as a resolved type, so the block is parsed with js-yaml's
+ * FAILSAFE_SCHEMA, which keeps every scalar a string (`4.10`, `1.0`,
+ * `2026-01-01`, `true`, `null`, `~` all stay as written). `json: true` makes a
+ * repeated key take the last value instead of throwing, as PyYAML's
+ * `nodes[-1]` does. Nested lists/maps as items are dropped (the reference
+ * keeps scalar nodes only).
+ *
+ * Remaining known differences, from the two YAML parsers themselves: a tab
+ * right after `tags:` (PyYAML rejects the block, js-yaml accepts it) and
+ * Python-specific tags such as `!!python/str` (js-yaml rejects them). Unit
+ * tests pin the scalar cases; scripts/check-memory-recall.mjs compares tags
+ * only for pages that rank in its questions' top 50, so it is a spot check,
+ * not a guarantee for every page.
  */
 function parseTags(block) {
   let data;
   try {
-    data = matter(`---\n${block}\n---\n`, { json: true }).data;
+    data = yaml.safeLoad(block, { schema: yaml.FAILSAFE_SCHEMA, json: true });
   } catch {
     return [];
   }
-  const raw = data?.tags;
+  const raw = data && typeof data === 'object' && !Array.isArray(data) ? data.tags : undefined;
   if (!Array.isArray(raw)) return [];
   const tags = [];
   for (const item of raw) {
-    if (typeof item !== 'string' && typeof item !== 'number' && typeof item !== 'boolean') continue;
-    const tag = pyStrip(String(item));
+    if (typeof item !== 'string') continue;
+    const tag = pyStrip(item);
     if (tag) tags.push(tag);
   }
   return tags;
