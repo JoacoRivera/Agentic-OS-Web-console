@@ -26,7 +26,7 @@ function Latency({ latency }) {
     <div className="panel">
       <div className="label">Capture → ingest latency</div>
       {latency.n === 0 ? (
-        <Row name="No dated ingest entries yet" />
+        <Row name="No latency data" />
       ) : (
         <>
           <Row

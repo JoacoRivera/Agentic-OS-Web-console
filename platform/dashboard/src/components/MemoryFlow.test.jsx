@@ -79,13 +79,36 @@ describe('MemoryFlow (Maintenance section)', () => {
         }}
       />
     );
-    expect(screen.getByText('No dated ingest entries yet')).toBeInTheDocument();
+    expect(screen.getByText('No latency data')).toBeInTheDocument();
     expect(screen.getByText('No maintenance pass on record')).toBeInTheDocument();
     expect(screen.getByText('no intake date — age unknown')).toBeInTheDocument();
     expect(screen.getByText('empty')).toBeInTheDocument();
     expect(screen.getByText('No dated captures or ingest entries')).toBeInTheDocument();
     expect(container.textContent).not.toMatch(/\b0d\b|nulld|NaN/);
     expect(container.querySelector('.chip')).toBeNull();
+  });
+
+  test('no latency with dated ingest entries present does not claim there are none', () => {
+    render(
+      <MemoryFlow
+        metrics={{
+          flow: flow({
+            // Ingest entries exist (By month), but the only Ingested capture was
+            // ingested before its intake date.
+            latency: {
+              ...none,
+              buckets: [],
+              noDatedIngestEntry: 0,
+              ingestBeforeIntake: 1,
+            },
+          }),
+        }}
+      />
+    );
+    expect(screen.getByText('No latency data')).toBeInTheDocument();
+    expect(screen.queryByText(/no dated ingest entries/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/1 with an ingest entry dated before the knowledge intake/)).toBeInTheDocument();
+    expect(screen.getAllByRole('row').length).toBeGreaterThan(1); // By month lists the entries
   });
 
   test('one pass on record has no gap yet', () => {
