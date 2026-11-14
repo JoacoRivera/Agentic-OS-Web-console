@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "express": "^4.21.2",
-    "gray-matter": "^4.0.3"
+    "gray-matter": "^4.0.3",
+    "js-yaml": "^3.15.0"
   },
   "devDependencies": {
     "supertest": "^7.1.0"

@@ -1,0 +1,28 @@
+{
+  "_comment": "Synthetic wiki corpus for recall tests (server/test/recall.test.js, memory.test.js). No real memory content.",
+  "pages": {
+    "wiki/index.md": "---\ntags: [index-tag]\n---\n\n# Index\n\n> Catalog of every page; the maintenance pass and wiki lint are listed here.\n\nCatalog — excluded from recall.\n",
+    "wiki/log.md": "---\ntags: [log-tag]\n---\n\n# Log\n\n> Chronology.\n\nlint | maintenance pass — excluded from recall.\n",
+    "wiki/_template.md": "---\ntags: []\n---\n\n# Template\n\n> Summary of the maintenance pass goes here.\n\nTemplate body — excluded.\n",
+    "wiki/projects/alpha.md": "---\ntags: [alpha-project, code-review]\nupdated: 2026-07-01\n---\n\n# Alpha Project\n\n> One-line summary of the alpha project.\n\nBody text.\n",
+    "wiki/workflows/review.md": "---\ntags: [code-review, checklist]\nupdated: 2026-07-02\n---\n\n# Code Review Workflow\n\n> How code review is run here.\n\nBody text. A review follows the checklist, step by step.\n",
+    "wiki/notes/misc.md": "---\nupdated: 2026-07-03\n---\n\n# Misc\n\nNo tags at all. Odds and ends about the garden shed.\n",
+    "wiki/notes/broken.md": "---\ntags: [oops\n---\n\n# Broken Frontmatter\n\nThis page mentions the compass and nothing else.\n",
+    "wiki/notes/nofm.md": "# No Frontmatter\n\n> Should never be indexed.\n\ntags: [no-frontmatter-body-tag]\nThe compass is here too, but this page has no block.\n",
+    "wiki/projects/dup.md": "---\ntags: [dup-tag, Dup-Tag, DUP-TAG]\n---\n\n# Dup\n\n> Page with a duplicated tag.\n\nBody text.\n",
+    "wiki/workflows/maintenance-pass.md": "---\nworkflow_kind: runbook\ntags:\n  - maintenance\n  - wiki-lint\n  - cadence\n---\n\n# Maintenance Pass\n\n> How the periodic maintenance pass works: run wiki lint,\n> reconcile the index, and append a log entry.\n\n## Steps\n\n1. Run the lint script and read every finding.\n2. Fix broken links and stale summaries.\n3. Append a `lint | maintenance pass` entry to the log.\n\n> A later blockquote: this is a note, not the summary.\n\n## Cadence\n\nThe pass runs weekly. A missed pass shows as overdue on the console. Each pass reviews pages, links, summaries and tags, and records what it changed.\n",
+    "wiki/concepts/wiki-lint.md": "---\ntags: [wiki-lint, checks]\n---\n\n# Wiki Lint Checks\n\n> Wiki lint checks frontmatter, index coverage, log format, broken links, orphan pages, duplicate titles, summary length, tag hygiene and lineage fields across every published page in the wiki tree.\n\nEach check reports a finding with the page path. The checks run before every commit.\n",
+    "wiki/notes/lint-mention.md": "---\ntags: [notes]\n---\n\n# Scratch Notes\n\n> Assorted notes.\n\nOnce, lint flagged a missing summary here; the checks were right.\n",
+    "wiki/notes/body-only.md": "---\ntags: [coastal]\n---\n\n# Coastal Notes\n\n> Places along the shore.\n\nThe old lighthouse stands at the end of the pier.\n",
+    "wiki/workflows/evals/results/2026-01-01.md": "---\ntags: [eval-result]\n---\n\n# Eval Run 2026-01-01\n\n> One run of the maintenance pass eval.\n\nThe maintenance pass eval passed: lint ran and the log entry was appended.\n",
+    "wiki/examples/sample.md": "---\ntags: [example]\n---\n\n# Worked Example\n\n> A worked maintenance pass, start to finish.\n\nThe maintenance pass in this example fixed two links.\n",
+    "wiki/examples-of-maintenance.md": "---\ntags: [index-of-examples]\n---\n\n# Examples Of Maintenance\n\n> Pointers to worked examples.\n\nNot itself a history page, despite the name.\n",
+    "wiki/notes/no-h1.md": "---\ntags: [untitled]\n---\n\nThis page has no title line, only text about the compass rose.\n",
+    "wiki/notes/scalar-tags.md": "---\ntags: foo-scalar\n---\n\n# Scalar Tags\n\n> A scalar tags value is not a list.\n\nBody mentions foo-scalar once.\n",
+    "wiki/tools/runtime.md": "---\ntags: [runtime]\n---\n\n# Runtime Upgrade\n\n> Notes on the 4.5.2 runtime.\n\nThe runtime moved to 4.5.2 last spring; 4.5 behaviour is unchanged.\n",
+    "wiki/tools/legacy.md": "---\ntags: [runtime, legacy]\n---\n\n# Legacy Runtime\n\n> The 4.8 line.\n\nThe legacy runtime stays on 4.8 until the upgrade lands.\n",
+    "wiki/notes/revision.md": "---\ntags: [revisión]\n---\n\n# Revisión del Proceso\n\n> Über die Revisión: accented words fold to plain letters.\n\nLa revisión cubre el proceso über alles.\n",
+    "wiki/notes/crlf.md": "---\r\ntags: [harbor]\r\n---\r\n\r\n# Harbor Log\r\n\r\n> Ships in the harbor,\r\n> counted daily.\r\n\r\nThe harbor master counts ships.\r\n",
+    "wiki/notes/lf.md": "---\ntags: [harbor]\n---\n\n# Harbor Log\n\n> Ships in the harbor,\n> counted daily.\n\nThe harbor master counts ships.\n"
+  }
+}

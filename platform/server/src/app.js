@@ -132,14 +132,17 @@ export function createApp(config, { executor = createExecutor(config), financeCa
     }
   });
 
-  // Memory recall (ADR-0001/0005): deterministic tag-based recall over
-  // wiki/**/*.md only — mirrors the aos-query-memory Skill's mechanical half
-  // (scripts/wiki-tags.py). raw/ is never read here regardless of
-  // EXPOSE_RAW_CONTENT. Finds pages only; it never invokes Hermes, Claude,
-  // Codex, or any Skill — synthesis stays a copy-only handoff in the UI.
+  // Memory recall (ADR-0001/0005): deterministic recall over wiki/**/*.md
+  // only, in the memory repo's order — question-first BM25F
+  // (scripts/wiki_recall.py), then tag recall (scripts/wiki-tags.py).
+  // includeHistory=1|true scores eval results and examples at full weight.
+  // raw/ is never read here regardless of EXPOSE_RAW_CONTENT. Finds pages
+  // only; it never invokes Hermes, Claude, Codex, or any Skill — synthesis
+  // stays a copy-only handoff in the UI.
   app.get('/api/memory/query', async (req, res) => {
     try {
-      res.json(await queryMemory(config, req.query.topic));
+      const includeHistory = req.query.includeHistory === '1' || req.query.includeHistory === 'true';
+      res.json(await queryMemory(config, req.query.topic, { includeHistory }));
     } catch (err) {
       if (err.name === 'BadQueryError') {
         res.status(400).json({ error: 'bad-query', message: err.message });
