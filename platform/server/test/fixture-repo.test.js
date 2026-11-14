@@ -32,6 +32,8 @@ import { listWorkflows, STATUS_LABELS, WORKFLOW_KINDS } from '../src/workflows.j
  *             _template basenames and the wiki/log/ archive)
  *   capture   'draft' | 'on-hold' | 'ingested' | 'layout-warning' (raw only;
  *             absent = not a capture)
+ *   origin    'bridge' | 'other' on every capture row: 'bridge' when a header
+ *             `Source:` line (before the first `## `) names the Memory Bridge
  *   legacy    `Status: Approved` (Ingested, legacy spelling)
  *   mismatch  the classifier's mismatch code
  *   sincePass first ingest log entry sits above the newest maintenance pass
@@ -53,35 +55,42 @@ const wf = (kind, status) => ({ lineage: 'missing-lineage', workflow: { kind, st
 const CASES = {
   // ---- raw/ ----
   'raw/README.md': NOT_A_PAGE,
-  'raw/projects/examples/draft-plain.md': { capture: 'draft', lineage: 'origin', intake: '2026-01-25' },
-  'raw/projects/examples/draft-on-hold.md': { capture: 'on-hold', lineage: 'origin', intake: '2025-12-20' },
-  'raw/projects/examples/ingested-logged.md': { capture: 'ingested', sincePass: true, lineage: 'origin', intake: '2026-01-16' },
-  'raw/workflows/examples/ingested-legacy-approved.md': { capture: 'ingested', legacy: true, lineage: 'origin', intake: '2025-11-20' },
+  'raw/projects/examples/draft-plain.md': { capture: 'draft', origin: 'other', lineage: 'origin', intake: '2026-01-25' },
+  'raw/projects/examples/draft-on-hold.md': { capture: 'on-hold', origin: 'other', lineage: 'origin', intake: '2025-12-20' },
+  'raw/projects/examples/ingested-logged.md': { capture: 'ingested', origin: 'other', sincePass: true, lineage: 'origin', intake: '2026-01-16' },
+  'raw/workflows/examples/ingested-legacy-approved.md': { capture: 'ingested', origin: 'other', legacy: true, lineage: 'origin', intake: '2025-11-20' },
   'raw/workflows/examples/ingested-status-mismatch.md': {
     capture: 'ingested',
+    origin: 'other',
     mismatch: 'draft-with-evidence',
     lineage: 'origin', intake: '2025-12-15',
   },
-  'raw/projects/draft-outside-examples.md': { capture: 'layout-warning', lineage: 'origin', intake: '2026-01-05' },
-  'raw/projects/examples/unlineaged.md': { capture: 'draft', lineage: 'missing-lineage' },
-  'raw/projects/examples/future-dated.md': { capture: 'draft', lineage: 'future-intake-date', intake: '2999-01-01' },
+  'raw/projects/draft-outside-examples.md': { capture: 'layout-warning', origin: 'other', lineage: 'origin', intake: '2026-01-05' },
+  'raw/projects/examples/unlineaged.md': { capture: 'draft', origin: 'other', lineage: 'missing-lineage' },
+  'raw/projects/examples/future-dated.md': { capture: 'draft', origin: 'other', lineage: 'future-intake-date', intake: '2999-01-01' },
   // Memory Bridge captures and decoys (i05). State does not depend on origin.
-  'raw/projects/examples/bridge-draft.md': { capture: 'draft', lineage: 'origin', intake: '2026-01-28' },
-  'raw/projects/examples/bridge-draft-on-hold.md': { capture: 'on-hold', lineage: 'origin', intake: '2025-11-28' },
-  'raw/projects/examples/bridge-ingested-after-pass.md': { capture: 'ingested', sincePass: true, lineage: 'origin', intake: '2026-01-19' },
-  'raw/projects/examples/bridge-ingested-before-pass.md': { capture: 'ingested', lineage: 'origin', intake: '2026-01-08' },
-  'raw/projects/examples/ingested-before-pass.md': { capture: 'ingested', lineage: 'origin', intake: '2026-01-06' },
-  'raw/projects/examples/decoy-bridge-prose.md': { capture: 'draft', lineage: 'origin', intake: '2025-12-28' },
-  'raw/projects/examples/decoy-bridge-bullet.md': { capture: 'draft', lineage: 'origin', intake: '2026-01-22' },
+  'raw/projects/examples/bridge-draft.md': { capture: 'draft', origin: 'bridge', lineage: 'origin', intake: '2026-01-28' },
+  'raw/projects/examples/bridge-draft-on-hold.md': { capture: 'on-hold', origin: 'bridge', lineage: 'origin', intake: '2025-11-28' },
+  'raw/projects/examples/bridge-ingested-after-pass.md': { capture: 'ingested', origin: 'bridge', sincePass: true, lineage: 'origin', intake: '2026-01-19' },
+  'raw/projects/examples/bridge-ingested-before-pass.md': { capture: 'ingested', origin: 'bridge', lineage: 'origin', intake: '2026-01-08' },
+  'raw/projects/examples/ingested-before-pass.md': { capture: 'ingested', origin: 'other', lineage: 'origin', intake: '2026-01-06' },
+  'raw/projects/examples/decoy-bridge-prose.md': { capture: 'draft', origin: 'other', lineage: 'origin', intake: '2025-12-28' },
+  'raw/projects/examples/decoy-bridge-bullet.md': { capture: 'draft', origin: 'other', lineage: 'origin', intake: '2026-01-22' },
+  // The bridge rule is header-only: the full marker line at column 0 after the
+  // first `## ` heading (in a code fence, or under `## Notes`) is not bridge.
+  'raw/projects/examples/decoy-bridge-fenced.md': { capture: 'draft', origin: 'other', lineage: 'origin', intake: '2026-01-26' },
+  'raw/projects/examples/decoy-bridge-section.md': { capture: 'draft', origin: 'other', lineage: 'origin', intake: '2025-12-10' },
   // Classifier edge cases (review F3).
   'raw/projects/examples/ingested-without-evidence.md': {
     capture: 'ingested',
+    origin: 'other',
     mismatch: 'marked-ingested-without-evidence',
     lineage: 'origin',
     intake: '2025-12-02',
   },
   'raw/projects/examples/ingested-stale-hold.md': {
     capture: 'ingested',
+    origin: 'other',
     staleHold: true,
     lineage: 'origin',
     intake: '2025-11-15',
@@ -171,6 +180,13 @@ test('fixture: minimum coverage of every case the CI checks rely on', async () =
   for (const state of ['draft', 'on-hold', 'ingested', 'layout-warning']) {
     assert.ok(count((r) => r.capture === state) > 0, `no ${state} capture`);
   }
+  assert.deepEqual(where((r) => r.capture && !['bridge', 'other'].includes(r.origin)), [], 'capture row without an origin');
+  // The > 0 counts are the tripwire for the memory repo rewording the marker.
+  for (const state of ['draft', 'on-hold', 'ingested']) {
+    assert.ok(count((r) => r.capture === state && r.origin === 'bridge') > 0, `no bridge ${state} capture`);
+  }
+  assert.ok(count((r) => r.sincePass && r.origin === 'bridge') > 0, 'no bridge capture ingested since the pass');
+  assert.ok(count((r) => r.sincePass && r.origin === 'other') > 0, 'no other capture ingested since the pass');
   assert.ok(count((r) => r.legacy) > 0, 'no legacy Approved capture');
   for (const code of ['draft-with-evidence', 'marked-ingested-without-evidence']) {
     assert.ok(count((r) => r.mismatch === code) > 0, `no ${code} capture`);
@@ -283,10 +299,30 @@ test('fixture: metrics at FIXED_NOW equal the totals tallied from the table', as
     mismatchN: count((r) => r.mismatch),
     layoutWarningN: count((r) => r.capture === 'layout-warning'),
     holdWarningN: holdWarnings(),
+    bridge: {
+      draftN: count((r) => r.capture === 'draft' && r.origin === 'bridge'),
+      heldN: count((r) => r.capture === 'on-hold' && r.origin === 'bridge'),
+      ingestedN: count((r) => r.capture === 'ingested' && r.origin === 'bridge'),
+    },
   });
+  for (const [key, n] of Object.entries(m.captures.bridge)) assert.ok(n > 0, `captures.bridge.${key} is 0`);
+  // drafts[] is capped (DRAFT_LIMIT), so each listed row is checked against its own row.
+  const listed = [...m.drafts, ...m.held];
+  assert.deepEqual(listed.map((i) => [i.path, i.origin]), listed.map((i) => [i.path, CASES[i.path]?.origin]));
+  assert.ok(listed.some((i) => i.origin === 'bridge'), 'no bridge row listed in drafts[] / held[]');
 
   assert.equal(m.health.lastPass, LAST_PASS);
   assert.equal(m.health.ingestedSincePass, count((r) => r.sincePass));
+  assert.deepEqual(m.health.sincePass.byOrigin, {
+    bridge: count((r) => r.sincePass && r.origin === 'bridge'),
+    other: count((r) => r.sincePass && r.origin === 'other'),
+  });
+  assert.ok(m.health.sincePass.byOrigin.bridge > 0 && m.health.sincePass.byOrigin.other > 0);
+  assert.deepEqual(
+    m.health.sincePass.items.map((i) => [i.path, i.origin]).sort(),
+    rows.filter((r) => r.sincePass).map((r) => [r.path, r.origin]).sort()
+  );
+  assert.equal(m.health.sincePass.truncated, false);
 
   const problems = pages
     .filter((r) => r.lineage === 'missing-lineage' || r.lineage === 'future-intake-date')
