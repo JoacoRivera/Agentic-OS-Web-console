@@ -23,6 +23,7 @@ yet) — see ADR-0005.
 | `npm run check:workflows` | Registry inclusion + status roll-up vs an independent recount (ADR-0006/0007) |
 | `npm run check:skills` | Skill registry vs an independent recount, including exact `frontmatter.name` = directory conformance |
 | `npm run check:metrics-groundtruth` | `/api/metrics` vs an independent recount of the active filesystem roots (permanent check, ADR-0002) |
+| `npm run check:memory-recall` | `/api/memory/query` vs the memory repo's own `scripts/wiki_recall.py` (run with `--root`) on fixed and title-derived questions, both modes: pages indexed/matched, order, scores, tags, summaries. Needs `python3` + PyYAML; no groundtruth = failure (exit 2). **Not** in the executable allowlist (ADR-0001), not in `verify` or CI |
 | `npm run check:family-health` | Family Health record parses and stays confined to its own root; prints counts only; skips when `HEALTH_REPO_ROOT` is unset. **Not** in the executable allowlist (ADR-0010) |
 
 ## Test strategy
@@ -101,12 +102,37 @@ content), and always summing to `unlineagedN + invalidN`. The chart states
 `unlineagedN + invalidN > 0`, otherwise `Lineage complete`. See ADR-0003 for the stable
 reason codes, complete contract, and examples.
 
-## Memory query (`GET /api/memory/query?topic=`)
+## Memory query (`GET /api/memory/query?topic=&includeHistory=`)
 
-The Memory Query section performs deterministic, read-only recall over frontmatter tags in
-`wiki/**/*.md`: it discovers matching tags, ranks published wiki pages by tag overlap, and
-returns each page's path, title, one-line summary, and matched tags. It never searches or
-returns `raw/` content, even when `EXPOSE_RAW_CONTENT=true`.
+The Memory Query section performs deterministic, read-only recall over `wiki/**/*.md` in
+the memory repo's own order (its `AGENTS.md` §Query):
+
+1. **Question-first recall** — the primary `results`: BM25F over each page's title, tags,
+   summary, path and text (weights 3/2/2/1/1), a port of the memory repo's
+   `scripts/aos_wiki/recall.py` (`python3 scripts/wiki_recall.py "<question>"`) in
+   `server/src/recall.js`. Pages with a score > 0, best first, ties by path; capped at 50
+   with `pagesMatched` counting all of them. Dated eval results (`evals/results/`) and
+   worked examples (`examples/`) score at half weight unless `includeHistory=1` (or
+   `true`). Each result carries `path`, `title`, `summary` (truncated at 160 characters
+   like the script prints it), all `tags`, the unrounded `score` and `history`. It is
+   lexical: ask in English with the identifiers you expect on the page.
+2. **Tag recall** — `tagRecall`: the question's words as substrings of the tag vocabulary,
+   pages ranked by matched-tag count (`scripts/wiki-tags.py`); the fallback when no page
+   shares a word with the question.
+
+Both steps rank one page set, loaded by `recall.py`'s rules: a page needs a frontmatter
+block; a block whose YAML does not parse is still indexed, without tags; the title falls
+back to the filename stem; the summary is the whole first `>` blockquote. An empty
+question, or one from which neither step gets a term, is a `400`. Nothing is cached or
+written: every request reads the wiki afresh. It never searches or returns `raw/` content,
+even when `EXPOSE_RAW_CONTENT=true`.
+
+The memory repo's scripts are the reference and the console the mirror: when
+`aos_wiki/recall.py` changes, `server/src/recall.js`, the loader in `server/src/memory.js`
+and `npm run check:memory-recall` change with it. That check runs the real script against
+the same `REPO_ROOT` and compares the two answers question by question;
+`server/test/recall.test.js` pins rankings the script produced on the synthetic corpus in
+`server/test/recall-corpus.json`, so `npm test` keeps parity without Python.
 
 This endpoint only finds candidate pages; it does not synthesize an answer or execute an LLM
 Skill. The dashboard offers a guided, copy-only Hermes handoff in the exact form
