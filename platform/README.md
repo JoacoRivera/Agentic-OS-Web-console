@@ -123,7 +123,8 @@ never status verdicts). Status comes from **objective defects only** (ADR-0006),
 match wins: `Missing links > Needs review > Unclassified > Stale > OK`. **Stale** means the
 frontmatter `updated:` day is more than 90 days (`WORKFLOW_STALE_DAYS`) before today; file
 mtime and Git are never evidence of age (a clone resets every mtime). A missing `updated:`
-or one that is not a real `YYYY-MM-DD` day is broken metadata, and rows carry
+or one that is not a real `YYYY-MM-DD` day is broken metadata — `checks_exempt` cannot
+waive it — and rows carry
 `updated`/`ageDays`. A workflow without
 `workflow_kind` frontmatter is **Unclassified** — never inferred, never green (ADR-0007);
 kind-independent defects (not indexed, broken metadata, unaccepted TODO/FIXME/open

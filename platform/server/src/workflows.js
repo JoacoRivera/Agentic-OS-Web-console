@@ -207,18 +207,20 @@ function evaluateWorkflow(config, ctx, relPath, text, now) {
   }
   const updatedText = updatedSource(text);
   const updated = calendarDay(updatedText);
-  if (updatedText === undefined) {
-    metadataProblems.push('updated is missing (wiki-lint check 2 requires it)');
-  } else if (updated === null) {
-    metadataProblems.push(`updated ${JSON.stringify(updatedText)} is not a YYYY-MM-DD date`);
-  }
+  const updatedProblem =
+    updatedText === undefined
+      ? 'updated is missing (wiki-lint check 2 requires it)'
+      : updated === null
+        ? `updated ${JSON.stringify(updatedText)} is not a YYYY-MM-DD date`
+        : null;
+  if (updatedProblem) metadataProblems.push(updatedProblem);
   const ageDays = updated === null ? null : daysBetween(updated, localIsoDay(now));
 
   const isExempt = (id) => exempt.includes(id);
   const kindBooleans = kindKnown ? WORKFLOW_KINDS[declaredKind] : null;
   const checks = [];
-  const required = (id, label, pass, detail = '') => {
-    const status = isExempt(id) ? 'exempt' : pass ? 'pass' : 'fail';
+  const required = (id, label, pass, detail = '', { waivable = true } = {}) => {
+    const status = waivable && isExempt(id) ? 'exempt' : pass ? 'pass' : 'fail';
     checks.push({
       id,
       label,
@@ -249,7 +251,16 @@ function evaluateWorkflow(config, ctx, relPath, text, now) {
     ctx.indexText !== null && textLinksTo(ctx.indexText, 'wiki', relPath),
     ctx.indexText === null ? 'wiki/index.md not found' : ''
   );
-  required('metadata', 'Metadata is valid', metadataProblems.length === 0, metadataProblems.join('; '));
+  if (isExempt('metadata') && updatedProblem) {
+    // checks_exempt waives metadata problems, never the updated: date: without
+    // it the row's age is unknown, so it could neither turn Stale nor honestly
+    // read OK (ADR-0006 amendment, 2026-11-14).
+    required('metadata', 'Metadata is valid', false, `${updatedProblem} — checks_exempt cannot waive it`, {
+      waivable: false,
+    });
+  } else {
+    required('metadata', 'Metadata is valid', metadataProblems.length === 0, metadataProblems.join('; '));
+  }
   const todos = findOpenTodos(body);
   required(
     'todos',

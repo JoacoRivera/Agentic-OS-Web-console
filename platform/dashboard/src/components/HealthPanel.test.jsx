@@ -1,5 +1,5 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import HealthPanel from './HealthPanel.jsx';
 
 const health = (overrides = {}) => ({
@@ -48,5 +48,17 @@ describe('HealthPanel', () => {
     expect(screen.getByText('wiki/lessons.md:8')).toBeInTheDocument();
     expect(container.querySelectorAll('.review-by-item')).toHaveLength(2);
     expect(container.querySelector('.chip').className).toContain('ok');
+  });
+});
+
+describe('HealthPanel review-by keys', () => {
+  test('the same token twice on one line renders two rows without a duplicate-key warning', () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const item = { path: 'wiki/lessons.md', line: 4, date: '2026-01-01', state: 'due' };
+    const reviewBy = { dueN: 2, malformedN: 0, pendingN: 0, nextDue: null, items: [item, { ...item }] };
+    const { container } = render(<HealthPanel metrics={{ health: health({ reviewBy }) }} />);
+    expect(container.querySelectorAll('.review-by-item')).toHaveLength(2);
+    expect(errors.mock.calls.some((args) => String(args[0]).includes('same key'))).toBe(false);
+    errors.mockRestore();
   });
 });

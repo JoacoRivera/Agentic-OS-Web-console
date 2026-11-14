@@ -45,8 +45,9 @@ export default function HealthPanel({ metrics }) {
             </span>
             <span className="run-time">{reviewBy.nextDue ? `next due ${reviewBy.nextDue}` : '—'}</span>
           </div>
-          {reviewBy.items.map((item) => (
-            <div key={`${item.path}:${item.line}:${item.date}`} className="run review-by-item">
+          {reviewBy.items.map((item, i) => (
+            // The index disambiguates the same token repeated on one line.
+            <div key={`${i}:${item.path}:${item.line}:${item.date}`} className="run review-by-item">
               <span className="run-time">{item.date}</span>
               <span className="run-name" title={`${item.path}:${item.line}`}>
                 {item.path}:{item.line}

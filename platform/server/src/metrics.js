@@ -461,6 +461,7 @@ export async function computeMetrics(config, now = new Date()) {
 
   // ---- review-by dates (wiki-lint check 25), wiki-wide, information only ----
   // Every wiki/ page lint scans (index/README included), the log excepted.
+  // Accepted cost: this re-reads pages the lineage pass already read (~400 small files).
   const reviewBy = await collectReviewBy(repoRoot, byRoot.wiki.map((p) => p.path), now);
 
   return {

@@ -83,6 +83,21 @@ before(async () => {
   await write('wiki/workflows/not-a-date.md', FM('policy', '', 'not-a-date') + '# Not A Date\n\nBody.\n');
   // Missing `updated` is broken metadata (wiki-lint check 2), never a guess.
   await write('wiki/workflows/no-updated.md', FM('policy', '', null) + '# No Updated\n\nBody.\n');
+  // checks_exempt: [metadata] must not waive `updated:` — without a date the
+  // row could never be judged Stale (review F1).
+  await write(
+    'wiki/workflows/exempt-undated.md',
+    FM('reference', 'checks_exempt: [metadata]\n', null) + '# Exempt Undated\n\nBody.\n'
+  );
+  await write(
+    'wiki/workflows/exempt-baddate.md',
+    FM('reference', 'checks_exempt: [metadata]\n', '2026-02-30') + '# Exempt Bad Date\n\nBody.\n'
+  );
+  // The exemption still waives every other metadata problem (here an unknown kind).
+  await write(
+    'wiki/workflows/exempt-dated.md',
+    FM('command', 'checks_exempt: [metadata]\n', '2026-11-01') + '# Exempt Dated\n\nBody.\n'
+  );
   await write('wiki/workflows/no-updated-plain.md', FM(null, '', null) + '# No Updated Plain\n\nBody.\n');
   // Quoted and commented values read as the date they spell.
   await write('wiki/workflows/quoted.md', FM('policy', '', '"2026-11-02"') + '# Quoted\n\nBody.\n');
@@ -134,6 +149,9 @@ before(async () => {
     'not-a-date',
     'no-updated',
     'no-updated-plain',
+    'exempt-undated',
+    'exempt-baddate',
+    'exempt-dated',
     'quoted',
     'commented',
     'review-due',
@@ -379,4 +397,28 @@ test('a due review-by date fails the informational check and leaves the status a
   assert.equal(check.fixHint, undefined);
   // A page with no review-by token, or only a future one, passes.
   assert.equal(rows['wiki/workflows/good-runbook.md'].checks.find((c) => c.id === 'review-by').status, 'pass');
+});
+
+test('checks_exempt: [metadata] cannot waive a missing or invalid updated: (never OK by default)', async () => {
+  const rows = byPath(await list());
+  for (const p of ['wiki/workflows/exempt-undated.md', 'wiki/workflows/exempt-baddate.md']) {
+    const row = rows[p];
+    assert.equal(row.status, 'needs-review', p);
+    assert.equal(row.ageDays, null, p);
+    assert.equal(row.failingRequired, 1, p);
+    const metadata = row.checks.find((c) => c.id === 'metadata');
+    assert.equal(metadata.status, 'fail', p);
+    assert.match(metadata.detail, /updated .*checks_exempt cannot waive it/, p);
+    assert.ok(metadata.fixHint, p);
+  }
+  // Every OK or Stale row has an age to judge by.
+  for (const w of Object.values(rows)) {
+    if (w.status === 'ok' || w.status === 'stale') assert.ok(Number.isInteger(w.ageDays), w.path);
+  }
+});
+
+test('checks_exempt: [metadata] still waives the other metadata problems', async () => {
+  const row = byPath(await list())['wiki/workflows/exempt-dated.md'];
+  assert.equal(row.checks.find((c) => c.id === 'metadata').status, 'exempt');
+  assert.equal(row.status, 'unclassified');
 });
