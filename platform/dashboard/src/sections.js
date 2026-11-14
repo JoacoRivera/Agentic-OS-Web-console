@@ -12,6 +12,7 @@ import {
   BrainCircuit,
   Users,
   Wallet,
+  Gauge,
 } from 'lucide-react';
 
 /**
@@ -26,6 +27,8 @@ export const SECTIONS = [
   { id: 'memory-query', label: 'Memory Query', icon: BrainCircuit, phase: 1 },
   { id: 'review-queue', label: 'Ingest Queue', icon: Inbox, phase: 1 },
   { id: 'memory-health', label: 'Maintenance', icon: HeartPulse, phase: 1 },
+  // Session Status: the live port of the memory repo's scripts/aos_status.py.
+  { id: 'session-status', label: 'Session Status', icon: Gauge, phase: 1 },
   { id: 'activity', label: 'Activity', icon: Activity, phase: 1 },
   // ADR-0010: a second repo root (the private Health-Management clone), not
   // memory. "Family Health" ≠ "Maintenance" (the memory maintenance-pass cadence) — keep them apart.
