@@ -1,7 +1,7 @@
 # CI for the console (plan: post-P3 roadmap §4.1). The tests own their
 # fixtures and check:paths is a pure table test. The build runs as its own
 # step so a build error shows in full (verify's build check keeps only the
-# tail). The live-repo checks (check:docs/workflows/skills/metrics-groundtruth)
+# tail). The live-repo checks (check:docs/workflows/skills/metrics-groundtruth/evals)
 # and the full verify then run via `npm run ci:fixture` against the committed
 # synthetic memory repo in platform/server/test/fixtures/memory-repo.
 name: ci

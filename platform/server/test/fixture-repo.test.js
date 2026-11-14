@@ -13,6 +13,7 @@ import {
 } from '../src/captures.js';
 import { computeMetrics } from '../src/metrics.js';
 import { listOperations } from '../src/operations.js';
+import { listEvals } from '../src/evals.js';
 import { listSkills } from '../src/skills.js';
 import { listWorkflows, STATUS_LABELS, WORKFLOW_KINDS } from '../src/workflows.js';
 
@@ -119,6 +120,13 @@ const CASES = {
   'wiki/workflows/stale-by-updated.md': wf('reference', 'stale'),
   'wiki/workflows/updated-missing.md': wf('reference', 'needs-review'),
   'wiki/workflows/updated-impossible.md': wf('reference', 'needs-review'),
+  // Eval cases and dated results (i07): excluded from the registry, read by /api/evals.
+  'wiki/workflows/evals/cases/alpha.md': wf(null, 'excluded'),
+  'wiki/workflows/evals/cases/beta.md': wf(null, 'excluded'),
+  'wiki/workflows/evals/cases/gamma.md': wf(null, 'excluded'),
+  'wiki/workflows/evals/results/README.md': NOT_A_PAGE,
+  'wiki/workflows/evals/results/2026-01-10.md': wf(null, 'excluded'),
+  'wiki/workflows/evals/results/2026-02-07.md': wf(null, 'excluded'),
   // Inline review-by tokens (i06); the bare prose mention on line 13 is ignored.
   'wiki/review-by-dates.md': {
     lineage: 'missing-lineage',
@@ -140,6 +148,7 @@ const HEALTH_AT = [
   { now: FIXED_NOW, passAge: 17, healthStale: true, overdue: true, ageLabel: '17 DAYS AGO' },
 ];
 const SKILL_COUNT = 8;
+const LINEAGE_PROBLEM_LIMIT = 20; // metrics.js caps lineage.problems; reasonCounts stay exact
 const SYNTHETIC_SOURCE_ID = /^00000000-0000-4000-8000-0000000000\d{2}$/;
 
 const rows = Object.entries(CASES).map(([p, row]) => ({ path: p, page: true, ...row }));
@@ -359,7 +368,9 @@ test('fixture: metrics at FIXED_NOW equal the totals tallied from the table', as
     .filter((r) => r.lineage === 'missing-lineage' || r.lineage === 'future-intake-date')
     .map((r) => ({ path: r.path, reason: r.lineage }))
     .sort((a, b) => (a.reason !== b.reason ? (a.reason < b.reason ? -1 : 1) : a.path < b.path ? -1 : 1));
-  assert.ok(problems.length <= 20, 'more problems than the capped sample; compare reasonCounts only');
+  // The eval pages (i07) take the list past the cap: more problems than the
+  // capped sample, so the sample must be the first LINEAGE_PROBLEM_LIMIT rows.
+  assert.ok(problems.length > LINEAGE_PROBLEM_LIMIT, 'the fixture no longer exercises the problems cap');
   const { reasonCounts, problems: reported, ...counters } = m.lineage;
   assert.deepEqual(counters, {
     eligibleN: pages.length,
@@ -370,7 +381,7 @@ test('fixture: metrics at FIXED_NOW equal the totals tallied from the table', as
     conflictingSourceIdsN: 0,
     futureDatedSourceIdsN: count((r) => r.lineage === 'future-intake-date'),
   });
-  assert.deepEqual(reported, problems);
+  assert.deepEqual(reported, problems.slice(0, LINEAGE_PROBLEM_LIMIT));
   assert.deepEqual(reasonCounts, {
     'future-intake-date': count((r) => r.lineage === 'future-intake-date'),
     'missing-lineage': count((r) => r.lineage === 'missing-lineage'),
@@ -424,4 +435,37 @@ test('fixture: the skill stubs cover every Skill the Operations catalog referenc
   const referenced = [...new Set(listOperations().operations.map((o) => o.skill).filter(Boolean))].sort();
   assert.equal(names.length, SKILL_COUNT);
   assert.deepEqual(names, referenced);
+});
+
+// Hand-derived from wiki/workflows/evals/ (i07; lint checks 9 and 23). The
+// results README's fenced template heading must be ignored.
+const EVALS = {
+  resultFiles: 2,
+  runs: 6,
+  verdicts: { PASS: 4, PARTIAL: 1, FAIL: 1 },
+  cases: 3,
+  ids: ['eval-alpha', 'eval-beta', 'eval-gamma', 'eval-retired'],
+  neverRun: ['eval-gamma'],
+  withoutCase: ['eval-retired'],
+  lastFullSuiteDate: '2026-02-07',
+};
+
+test('fixture: /api/evals reads the recorded verdicts the fixture holds', async () => {
+  const { evals, suite, problemCount } = await listEvals(config, FIXED_NOW);
+  const verdicts = { PASS: 0, PARTIAL: 0, FAIL: 0 };
+  for (const e of evals) for (const [v, n] of Object.entries(e.counts)) verdicts[v] += n;
+  assert.deepEqual(
+    {
+      resultFiles: suite.resultFiles,
+      runs: suite.runs,
+      verdicts,
+      cases: suite.cases,
+      ids: evals.map((e) => e.id),
+      neverRun: suite.neverRun,
+      withoutCase: suite.withoutCase,
+      lastFullSuiteDate: suite.lastFullSuiteDate,
+    },
+    EVALS
+  );
+  assert.equal(problemCount, 0);
 });

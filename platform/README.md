@@ -409,7 +409,7 @@ An unparseable or failed run is `parsed: false` with a reason — never zeros.
 CI (Phase 4.1, `.github/workflows/ci.yml`) runs on push/PR: `npm ci`, `npm test`,
 `npm run check:paths`, `npm run build` (its own step, so a build error shows in full), and
 `npm run ci:fixture`, which runs `check:docs`, `check:workflows`, `check:skills`,
-`check:metrics-groundtruth` and `verify` against
+`check:metrics-groundtruth`, `check:evals` and `verify` against
 the committed synthetic memory repo `server/test/fixtures/memory-repo/` with no `.env` and
 every optional source cleared. `ci:fixture` is a CI harness, not a `check:*` script or an
 Operation. Adding a fixture case = one file plus one row in `server/test/fixture-repo.test.js`,

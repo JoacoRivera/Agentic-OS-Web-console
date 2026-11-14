@@ -25,6 +25,7 @@ const CHECKS = [
   'scripts/check-workflows.mjs',
   'scripts/check-skills.mjs',
   'scripts/check-metrics-groundtruth.mjs',
+  'scripts/check-evals.mjs',
   'scripts/verify.mjs',
 ];
 
