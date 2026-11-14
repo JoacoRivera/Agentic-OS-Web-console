@@ -81,8 +81,9 @@ wiki+raw+templates minus `_template`; **double-counts a promoted item** — neve
 Ingested classified exactly as the memory repo's capture inventory does (its ADR-0002: no
 triage or approval; legacy `Status: Approved` = Ingested; `server/src/captures.js`),
 plus the **capture origin** — `captures.bridge.{draftN, heldN, ingestedN}` and `origin`
-(`bridge | other`) on each `drafts[]`/`held[]` row, `bridge` when a `Source:` line names the
-memory repo's `Agentic OS Memory Bridge automatic capture` (an attribute, never a state);
+(`bridge | other`) on each `drafts[]`/`held[]` row, `bridge` when a header `Source:` line
+(before the first `## ` heading) names the memory repo's `Agentic OS Memory Bridge automatic
+capture` (an attribute, never a state);
 `knowledgeN` plus lineage coverage; a 30-day
 knowledge-intake `series` keyed on explicit `source_id` + `knowledge_intake_date`
 origins, with `promoted_from` pages resolving to those origins instead of counting

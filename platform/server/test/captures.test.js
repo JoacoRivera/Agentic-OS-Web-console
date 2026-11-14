@@ -174,7 +174,7 @@ const BRIDGE_LINE =
   'Source: Agentic OS Memory Bridge automatic capture (client synthetic-client, role evaluator); capture-key 0123456789abcdef';
 const OTHER_LINE = 'Source: Claude Code session (synthetic)';
 
-test('captureOrigin: only a `Source:` line naming the bridge marks a bridge capture', () => {
+test('captureOrigin: only a header `Source:` line naming the bridge marks a bridge capture', () => {
   assert.equal(captureOrigin(`# c\n\n${BRIDGE_LINE}\nStatus: Draft\n`), 'bridge');
   assert.equal(captureOrigin(`# c\r\n\r\n${BRIDGE_LINE}\r\nStatus: Draft\r\n`), 'bridge');
   assert.equal(
@@ -186,6 +186,13 @@ test('captureOrigin: only a `Source:` line naming the bridge marks a bridge capt
   assert.equal(captureOrigin(`# c\n\n${OTHER_LINE}\n`), 'other');
   assert.equal(captureOrigin('# c\n\nStatus: Draft\n'), 'other');
   assert.equal(captureOrigin(''), 'other');
+  // The header is everything before the first `## ` line (the writer's layout).
+  assert.equal(
+    captureOrigin(`---\nsource_id: x\n---\n# Title\n\n${BRIDGE_LINE}\nStatus: Draft\n\n## Task\n\nbody\n`),
+    'bridge'
+  );
+  assert.equal(captureOrigin(`# c\n\n${OTHER_LINE}\n\n## Notes\n\n${BRIDGE_LINE}\n`), 'other');
+  assert.equal(captureOrigin(`# c\n\n## Output\n\n\`\`\`\n${BRIDGE_LINE}\n\`\`\`\n`), 'other');
 });
 
 /**
@@ -232,6 +239,12 @@ async function bridgeTree(withSource) {
       `\n## Notes\n\nThe Agentic OS Memory Bridge automatic capture is discussed here.\n- ${BRIDGE_LINE}\n`
     )
   );
+  // Body decoys: the full bridge line at column 0, but after the header.
+  await put(
+    'raw/p/examples/fenced.md',
+    capture(OTHER_LINE, 'Status: Draft', `\n## Output\n\n\`\`\`\n${BRIDGE_LINE}\n\`\`\`\n`)
+  );
+  await put('raw/p/examples/body-line.md', capture(OTHER_LINE, 'Status: Draft', `\n## Notes\n\n${BRIDGE_LINE}\n`));
   await put('scripts/capture-holds.txt', 'raw/p/examples/bridge-held.md # parked\n');
   return dir;
 }
@@ -255,11 +268,17 @@ after(async () => {
 
 test('bridge captures land in the same buckets as their non-bridge twins', () => {
   assert.deepEqual(b.captures.bridge, { draftN: 1, heldN: 1, ingestedN: 2 });
-  assert.deepEqual([b.draftN, b.heldN, b.ingestedN], [2, 1, 3]);
+  assert.deepEqual([b.draftN, b.heldN, b.ingestedN], [4, 1, 3]);
   assert.deepEqual([b.draftN, b.heldN, b.ingestedN], [plain.draftN, plain.heldN, plain.ingestedN]);
   assert.deepEqual(plain.captures.bridge, { draftN: 0, heldN: 0, ingestedN: 0 });
   const origins = Object.fromEntries([...b.drafts, ...b.held].map((d) => [d.name, d.origin]));
-  assert.deepEqual(origins, { 'bridge-draft': 'bridge', decoy: 'other', 'bridge-held': 'bridge' });
+  assert.deepEqual(origins, {
+    'bridge-draft': 'bridge',
+    'body-line': 'other',
+    decoy: 'other',
+    fenced: 'other',
+    'bridge-held': 'bridge',
+  });
 });
 
 test('captures ingested since the last pass are listed by origin, bridge first', () => {

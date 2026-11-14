@@ -33,10 +33,11 @@ _Avoid_: approved/unapproved, triage, review queue, risk class (all retired), tr
 legacy `Approved` capture as different from an Ingested one
 
 **Capture origin**:
-A read-only attribute of a capture, never a state: **`bridge`** when a line of the capture
-starts with the unqualified `Source:` marker and names `Agentic OS Memory Bridge automatic
-capture` (the memory repo's `_BRIDGE_SOURCE`, its ADR-0003 — a capture no user confirmed),
-otherwise **`other`**. Origin never changes Draft / on hold / Ingested; the console uses it
+A read-only attribute of a capture, never a state: **`bridge`** when a header `Source:` line
+— the unqualified marker at line start, in the lines before the first `## ` heading (a file
+with none is all header) — names `Agentic OS Memory Bridge automatic capture` (the memory
+repo's `_BRIDGE_SOURCE`, its ADR-0003 — a capture no user confirmed), otherwise **`other`**.
+A body that quotes or discusses the bridge does not make a capture `bridge`. Origin never changes Draft / on hold / Ingested; the console uses it
 so the maintenance pass can skim Memory Bridge captures apart (`captures.bridge`,
 `health.sincePass`). Only the enum is exposed, never the `Source:` line text.
 _Avoid_: unapproved capture, bridge queue, treating `other` as user-approved

@@ -259,18 +259,21 @@ function ingestLogIndex(entries) {
 export const BRIDGE_SOURCE = 'Agentic OS Memory Bridge automatic capture';
 
 /**
- * 'bridge' when some line starts with the unqualified `Source:` marker and
+ * 'bridge' when a header line starts with the unqualified `Source:` marker and
  * names BRIDGE_SOURCE (the ADR's "a `Source:` line naming …"); otherwise
- * 'other'. Line-anchored, unlike the doctor's whole-text substring, so a
- * capture that only discusses the bridge is not flagged. `other` never means
- * user-approved — the console does not guess about legacy `Source:` shapes.
+ * 'other'. The header is every line before the first line starting with `## `
+ * (the bridge writes it above `## Task`, aos_memory.py:1889-1898); a file with
+ * no such heading is all header. Narrower than the doctor's whole-text
+ * substring, so a capture that only discusses or quotes the bridge in its body
+ * is not flagged. `other` never means user-approved — the console does not
+ * guess about legacy `Source:` shapes.
  */
 export function captureOrigin(text) {
-  return normalize(text)
-    .split(LINE_SPLIT_RE)
-    .some((line) => line.startsWith('Source:') && line.includes(BRIDGE_SOURCE))
-    ? 'bridge'
-    : 'other';
+  for (const line of normalize(text).split(LINE_SPLIT_RE)) {
+    if (line.startsWith('## ')) break;
+    if (line.startsWith('Source:') && line.includes(BRIDGE_SOURCE)) return 'bridge';
+  }
+  return 'other';
 }
 
 /**
