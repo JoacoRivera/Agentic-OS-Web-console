@@ -2,8 +2,9 @@
 // (permanent allowlist). Asserts the ADR-0006/0007 registry rules with an
 // INDEPENDENT filesystem recount of wiki/workflows: inclusion (exclude
 // **/{examples,cases,results}/**), a closed status vocabulary, no defaulted
-// kind (un-annotated → unclassified unless a higher-precedence defect), and
-// a consistent summary roll-up.
+// kind (un-annotated → unclassified unless a higher-precedence defect), a
+// consistent summary roll-up, and Stale measured from frontmatter `updated:`
+// (never mtime).
 //
 // Usage: REPO_ROOT=<memory repo> node scripts/check-workflows.mjs
 import fssync from 'node:fs';
@@ -37,7 +38,7 @@ function recount(rel) {
 }
 const expected = recount('wiki/workflows').sort();
 
-const { workflows, summary } = await listWorkflows(config);
+const { workflows, summary, staleDays } = await listWorkflows(config);
 const reported = workflows.map((w) => w.path).sort();
 
 record(
@@ -82,6 +83,40 @@ record(
     Object.keys(STATUS_LABELS).every(
       (id) => summary[id] === workflows.filter((w) => w.status === id).length
     )
+);
+
+// `updated` must be the day the file itself declares, read as written — an
+// independent re-read of the top-level `updated:` line, not the server's parse.
+function declaredUpdated(relPath) {
+  const text = fssync.readFileSync(path.join(config.REPO_ROOT, relPath), 'utf8');
+  if (!text.startsWith('---')) return null;
+  const end = text.indexOf('\n---', 3);
+  if (end === -1) return null;
+  const line = text
+    .slice(text.indexOf('\n') + 1, end)
+    .split(/\r?\n/)
+    .find((l) => /^updated[ \t]*:/.test(l));
+  if (!line) return null;
+  const value = line.slice(line.indexOf(':') + 1).replace(/(^|[ \t])#.*$/, '').trim().replace(/^(["'])(.*)\1$/, '$2');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const [y, m, d] = value.split('-').map(Number);
+  const back = new Date(Date.UTC(y, m - 1, d));
+  return back.getUTCFullYear() === y && back.getUTCMonth() === m - 1 && back.getUTCDate() === d ? value : null;
+}
+const updatedMismatch = workflows.filter((w) => w.updated !== declaredUpdated(w.path)).map((w) => w.path);
+record(
+  'every row\'s updated is null or the real YYYY-MM-DD its frontmatter declares',
+  updatedMismatch.length === 0,
+  updatedMismatch.slice(0, 5).join(', ')
+);
+
+record(
+  `a stale row is older than ${staleDays} days by updated:, an ok row is not (never mtime)`,
+  workflows.every((w) =>
+    w.status === 'stale' ? Number.isInteger(w.ageDays) && w.ageDays > staleDays
+      : w.status === 'ok' ? Number.isInteger(w.ageDays) && w.ageDays <= staleDays
+        : true
+  )
 );
 
 console.log(

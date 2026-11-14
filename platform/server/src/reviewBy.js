@@ -48,6 +48,8 @@ export function scanReviewBy(text, todayIso) {
 }
 
 const STATE_ORDER = { due: 0, malformed: 1 };
+// Code-unit order, not localeCompare: the list order must not depend on the host locale.
+const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
  * Wiki-wide recount over `wikiPaths` (repo-relative, `wiki/…`). Log files are
@@ -78,8 +80,8 @@ export async function collectReviewBy(repoRoot, wikiPaths, now = new Date()) {
     .sort(
       (a, b) =>
         STATE_ORDER[a.state] - STATE_ORDER[b.state]
-        || a.date.localeCompare(b.date)
-        || a.path.localeCompare(b.path)
+        || cmp(a.date, b.date)
+        || cmp(a.path, b.path)
         || a.line - b.line
     )
     .slice(0, REVIEW_BY_ITEM_LIMIT);

@@ -6,7 +6,8 @@
 // classified Draft / on hold / Ingested as the memory repo's capture inventory
 // does; health from the newest `lint | maintenance pass` entry across the log
 // and its archive; knowledge intake deduplicated by explicit
-// `source_id` / `knowledge_intake_date` / `promoted_from` lineage). It
+// `source_id` / `knowledge_intake_date` / `promoted_from` lineage; review-by
+// dates as wiki-lint check 25 finds them). It
 // deliberately does NOT import `server/src/metrics.js`; the active filesystem
 // roots are the source of truth.
 //
@@ -550,6 +551,69 @@ async function recountLineage(paths) {
   };
 }
 
+// ---------- review-by dates (wiki-lint check 25) ----------
+// Scanned by hand — an index walk over the whole text, not the console's
+// per-line regex — so a shared regex mistake cannot pass both sides.
+const REVIEW_BY_TOKEN = 'review-by:';
+const LINE_BREAKS = new Set(['\n', '\r', '\v', '\f', '\x1c', '\x1d', '\x1e', '\x85', '\u2028', '\u2029']);
+const REVIEW_BY_LIMIT = 20;
+
+function reviewByHits(text) {
+  const hits = [];
+  let line = 1;
+  let scanned = 0;
+  const advanceTo = (end) => {
+    for (; scanned < end; scanned++) {
+      const ch = text[scanned];
+      if (!LINE_BREAKS.has(ch)) continue;
+      if (ch === '\r' && text[scanned + 1] === '\n') scanned++; // CRLF is one break
+      line++;
+    }
+  };
+  let at = text.indexOf(REVIEW_BY_TOKEN);
+  while (at !== -1) {
+    advanceTo(at);
+    let i = at + REVIEW_BY_TOKEN.length;
+    while (text[i] === ' ' || text[i] === '\t') i++;
+    let j = i;
+    while (j < text.length && text[j] !== '`' && !/\s/.test(text[j])) j++;
+    let value = text.slice(i, j);
+    while (value && '.,;:)'.includes(value.at(-1))) value = value.slice(0, -1);
+    if (value) hits.push({ line, value });
+    at = text.indexOf(REVIEW_BY_TOKEN, Math.max(j, at + 1));
+  }
+  return hits;
+}
+
+async function recountReviewBy(wikiAll) {
+  const today = todayLocal();
+  const due = [];
+  const malformed = [];
+  const pending = [];
+  for (const relPath of wikiAll) {
+    if (relPath === 'wiki/log.md' || isArchiveLog(relPath)) continue; // the log is history
+    const text = await fs.readFile(path.join(repoRoot, relPath), 'utf8');
+    for (const { line, value } of reviewByHits(text)) {
+      const day = calendarDay(value);
+      if (day === null) malformed.push({ path: relPath, line, date: value.slice(0, 40), state: 'malformed' });
+      else if (day <= today) due.push({ path: relPath, line, date: day, state: 'due' });
+      else pending.push(day);
+    }
+  }
+  const order = (a, b) =>
+    (a.date < b.date ? -1 : a.date > b.date ? 1 : 0)
+    || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
+    || a.line - b.line;
+  pending.sort();
+  return {
+    dueN: due.length,
+    malformedN: malformed.length,
+    pendingN: pending.length,
+    nextDue: pending[0] ?? null,
+    items: [...due.sort(order), ...malformed.sort(order)].slice(0, REVIEW_BY_LIMIT),
+  };
+}
+
 async function recount() {
   const wikiAll = listMd('wiki');
   const rawAll = listMd('raw');
@@ -561,6 +625,7 @@ async function recount() {
 
   const lineage = await recountLineage([...wiki, ...raw]);
   const caps = capturesRecount(rawAll, wikiAll);
+  const reviewBy = await recountReviewBy(wikiAll);
   const { lastPass } = caps;
   const dayStart = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
   const passAge = lastPass
@@ -581,6 +646,7 @@ async function recount() {
     passAge,
     healthStale: passAge === null || passAge >= 7,
     overdue: passAge === null || passAge >= 10,
+    reviewBy,
   };
 }
 
@@ -664,6 +730,7 @@ try {
   check('health.healthStale (pass due)', console_.health.healthStale, truth.healthStale);
   check('health.overdue', console_.health.overdue, truth.overdue);
   check('health.ingestedSincePass', console_.health.ingestedSincePass, truth.ingestedSincePass);
+  check('health.reviewBy (wiki-lint check 25: counters, next due, capped items)', console_.health.reviewBy, truth.reviewBy);
 
   // The whole 30-point curve, not just its endpoint: a wrong intake *date*
   // moves points without moving the total.
