@@ -229,6 +229,19 @@ try {
     `${reported.length} reported / ${recount.length} on disk`
   );
 
+  // Evals view (ADR-0001): read-only recorded verdicts — the console never
+  // runs or judges an eval; check:evals does the full independent recount.
+  const ev = await req(port, { reqPath: '/api/evals' });
+  const evBody = ev.status === 200 ? JSON.parse(ev.body) : {};
+  record(
+    '/api/evals responds 200 with evals[] + suite, every verdict PASS|PARTIAL|FAIL',
+    ev.status === 200 &&
+      Array.isArray(evBody.evals) &&
+      typeof evBody.suite === 'object' &&
+      evBody.evals.every((e) => e.runs.every((r) => ['PASS', 'PARTIAL', 'FAIL'].includes(r.verdict))),
+    `${evBody.evals?.length ?? 0} evals / ${evBody.suite?.runs ?? 0} runs`
+  );
+
   const badHost = await req(port, { headers: { Host: 'evil.example' } });
   record('non-loopback Host header is rejected (403)', badHost.status === 403);
 

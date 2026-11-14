@@ -7,6 +7,7 @@ import request from 'supertest';
 import { createApp } from '../src/app.js';
 import { createConfig } from '../src/config.js';
 import { listEvals, parseResultFile, EVAL_PROBLEM_LIMIT } from '../src/evals.js';
+import { EXECUTABLE_ALLOWLIST } from '../src/operations.js';
 
 // Synthetic fixture memory repo (ids and text are invented). The scanner
 // mirrors memory-repo lint checks 9 and 23; the console never runs or judges
@@ -284,4 +285,8 @@ test('GET /api/evals over the fixture; the Workflow registry still lists nothing
   const paths = wf.body.workflows.map((w) => w.path);
   assert.ok(paths.includes('wiki/workflows/evals.md'));
   assert.ok(!paths.some((p) => p.includes('/results/') || p.includes('/cases/')));
+});
+
+test('check:evals is a read-only parity check, never on the executable allowlist (invariant 1)', () => {
+  assert.ok(!EXECUTABLE_ALLOWLIST.some((id) => /eval/i.test(id)));
 });
