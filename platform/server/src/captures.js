@@ -19,6 +19,10 @@ import matter from 'gray-matter';
  * overdue. The weekly **maintenance pass** (`lint | maintenance pass` log
  * entry) is the owner's touchpoint and the only entry that resets the 7-day
  * timer. Everything here is read-only and computes on demand.
+ *
+ * A capture's **origin** (`bridge` | `other`) is a read-only attribute, never a
+ * state: `bridge` mirrors `scripts/aos_memory.py` `_BRIDGE_SOURCE` (memory repo
+ * ADR-0003, the Memory Bridge's automatic-capture `Source:` line).
  */
 
 export const HOLDS_FILE = 'scripts/capture-holds.txt';
@@ -250,6 +254,25 @@ function ingestLogIndex(entries) {
   return first;
 }
 
+// scripts/aos_memory.py:697 `_BRIDGE_SOURCE`. If the memory repo rewords it,
+// change it here and in check-metrics-groundtruth.mjs (hardcoded twice on purpose).
+export const BRIDGE_SOURCE = 'Agentic OS Memory Bridge automatic capture';
+
+/**
+ * 'bridge' when some line starts with the unqualified `Source:` marker and
+ * names BRIDGE_SOURCE (the ADR's "a `Source:` line naming …"); otherwise
+ * 'other'. Line-anchored, unlike the doctor's whole-text substring, so a
+ * capture that only discusses the bridge is not flagged. `other` never means
+ * user-approved — the console does not guess about legacy `Source:` shapes.
+ */
+export function captureOrigin(text) {
+  return normalize(text)
+    .split(LINE_SPLIT_RE)
+    .some((line) => line.startsWith('Source:') && line.includes(BRIDGE_SOURCE))
+    ? 'bridge'
+    : 'other';
+}
+
 /**
  * Classify every in-scope capture into the inventory's buckets.
  *
@@ -289,7 +312,7 @@ export async function classifyCaptures(repoRoot, rawPaths, wikiPaths, entries) {
       buckets.layoutWarning.push({ path: rel, status });
       continue;
     }
-    const item = { path: rel, status, evidenced };
+    const item = { path: rel, status, evidenced, origin: captureOrigin(text) };
     if (markedIngested || evidenced) {
       if (markedIngested && !evidenced) item.mismatch = 'marked-ingested-without-evidence';
       else if (evidenced && !markedIngested) item.mismatch = 'draft-with-evidence';
@@ -317,8 +340,30 @@ export async function classifyCaptures(repoRoot, rawPaths, wikiPaths, entries) {
  * decides. null when no pass is on record (the pass is simply due).
  */
 export function ingestedSincePass(buckets, firstIngest, entries, lastPass) {
+  return capturesSincePass(buckets, firstIngest, entries, lastPass)?.length ?? null;
+}
+
+/**
+ * The captures `ingestedSincePass` counts, as `[{path, origin, ingestedOn}]`
+ * (`ingestedOn` = the first ingest entry's date): bridge first, then newest
+ * log entry first, then path. null when no pass is on record.
+ */
+export function capturesSincePass(buckets, firstIngest, entries, lastPass) {
   if (!lastPass) return null;
-  return buckets.ingested.filter(
-    (item) => (firstIngest.get(item.path) ?? entries.length) < lastPass.index
-  ).length;
+  const rank = (origin) => (origin === 'bridge' ? 0 : 1);
+  return buckets.ingested
+    .filter((item) => (firstIngest.get(item.path) ?? entries.length) < lastPass.index)
+    .map((item) => ({
+      path: item.path,
+      origin: item.origin,
+      index: firstIngest.get(item.path),
+      ingestedOn: entries[firstIngest.get(item.path)].dateText,
+    }))
+    .sort(
+      (a, b) =>
+        rank(a.origin) - rank(b.origin)
+        || a.index - b.index
+        || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0)
+    )
+    .map(({ path: p, origin, ingestedOn }) => ({ path: p, origin, ingestedOn }));
 }
