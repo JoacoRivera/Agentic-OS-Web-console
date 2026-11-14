@@ -216,6 +216,17 @@ function holdsRecount() {
   return { holds, warnings };
 }
 
+// The Memory Bridge marker (memory repo scripts/aos_memory.py `_BRIDGE_SOURCE`),
+// hardcoded here a second time on purpose: a rewording must be changed knowingly
+// in both places. Detected by slicing the header (lines before the first `## `
+// line) and a per-line regex, not the producer's early-exit loop.
+const BRIDGE_LINE_RE = /^Source:.*Agentic OS Memory Bridge automatic capture/;
+const isBridge = (text) => {
+  const lines = pyLines(text);
+  const end = lines.findIndex((l) => /^## /.test(l));
+  return (end === -1 ? lines : lines.slice(0, end)).some((l) => BRIDGE_LINE_RE.test(l));
+};
+
 function capturesRecount(rawAll, wikiAll) {
   const entries = logEntriesRecount();
   const oldestIngest = new Map();
@@ -233,6 +244,8 @@ function capturesRecount(rawAll, wikiAll) {
   let holdWarningN = warnings;
   const ingested = [];
   const inScope = new Set();
+  const bridge = { draftN: 0, heldN: 0, ingestedN: 0 };
+  const bridgePaths = new Set();
   for (const rel of rawAll) {
     if (isTemplate(rel)) continue;
     const text = readNormalized(rel) ?? '';
@@ -245,6 +258,12 @@ function capturesRecount(rawAll, wikiAll) {
     if (!inside && !marked) {
       layoutWarningN++;
       continue;
+    }
+    if (isBridge(text)) {
+      bridgePaths.add(rel);
+      if (marked || evidence) bridge.ingestedN++;
+      else if (holds.has(rel)) bridge.heldN++;
+      else bridge.draftN++;
     }
     if (marked || evidence) {
       ingested.push(rel);
@@ -260,6 +279,26 @@ function capturesRecount(rawAll, wikiAll) {
   const since = pass
     ? ingested.filter((p) => (oldestIngest.get(p) ?? Infinity) < pass.index).length
     : null;
+  let sinceByOrigin = null;
+  if (pass) {
+    sinceByOrigin = { bridge: 0, other: 0 };
+    for (const p of ingested) {
+      if (!((oldestIngest.get(p) ?? Infinity) < pass.index)) continue;
+      sinceByOrigin[bridgePaths.has(p) ? 'bridge' : 'other']++;
+    }
+  }
+  // The since-pass rows as [path, origin, date of the oldest ingest entry]:
+  // bridge rows, then other rows, each newest entry first, then path.
+  let sinceRows = null;
+  if (pass) {
+    const byIndexThenPath = (a, b) =>
+      oldestIngest.get(a) - oldestIngest.get(b) || (a > b) - (a < b);
+    const isSince = (p) => oldestIngest.has(p) && oldestIngest.get(p) < pass.index;
+    const row = (p) => [p, bridgePaths.has(p) ? 'bridge' : 'other', entries[oldestIngest.get(p)].date];
+    const bridgeRows = ingested.filter((p) => isSince(p) && bridgePaths.has(p)).sort(byIndexThenPath);
+    const otherRows = ingested.filter((p) => isSince(p) && !bridgePaths.has(p)).sort(byIndexThenPath);
+    sinceRows = [...bridgeRows, ...otherRows].map(row);
+  }
   return {
     capN: draftN + heldN + ingested.length,
     draftN,
@@ -268,6 +307,10 @@ function capturesRecount(rawAll, wikiAll) {
     captures: { legacyApprovedN, mismatchN, layoutWarningN, holdWarningN },
     lastPass: pass?.date ?? null,
     ingestedSincePass: since,
+    bridge,
+    sinceByOrigin,
+    sinceRows,
+    bridgePaths,
   };
 }
 
@@ -724,13 +767,32 @@ try {
   ]) {
     check(f, console_[f], truth[f]);
   }
-  check('captures (legacy Approved / mismatch / layout / hold warnings)', console_.captures, truth.captures);
+  const { bridge: consoleBridge, ...consoleCaptures } = console_.captures;
+  check('captures (legacy Approved / mismatch / layout / hold warnings)', consoleCaptures, truth.captures);
   check('health.lastPass (maintenance pass)', console_.health.lastPass, truth.lastPass);
   check('health.passAge', console_.health.passAge, truth.passAge);
   check('health.healthStale (pass due)', console_.health.healthStale, truth.healthStale);
   check('health.overdue', console_.health.overdue, truth.overdue);
   check('health.ingestedSincePass', console_.health.ingestedSincePass, truth.ingestedSincePass);
   check('health.reviewBy (wiki-lint check 25: counters, next due, capped items)', console_.health.reviewBy, truth.reviewBy);
+  check('captures.bridge (Memory Bridge Draft / on hold / Ingested)', consoleBridge, truth.bridge);
+  check('health.sincePass.byOrigin', console_.health.sincePass?.byOrigin ?? null, truth.sinceByOrigin);
+  // Which captures are listed, not just how many: [path, origin, ingestedOn]
+  // tuples in order. A truncated list must be the first rows of the recount.
+  const sinceGot = console_.health.sincePass;
+  const sinceTuples = sinceGot ? sinceGot.items.map((i) => [i.path, i.origin, i.ingestedOn]) : null;
+  const sinceWant =
+    truth.sinceRows && sinceGot?.truncated ? truth.sinceRows.slice(0, sinceTuples.length) : truth.sinceRows;
+  check('health.sincePass.items ([path, origin, ingestedOn])', sinceTuples, sinceWant);
+  check(
+    'health.sincePass.truncated',
+    sinceGot?.truncated ?? null,
+    truth.sinceRows && sinceTuples ? truth.sinceRows.length > sinceTuples.length : null
+  );
+  const rowOrigins = (rows) => rows.map((d) => [d.path, d.origin]);
+  const wantOrigins = (rows) => rows.map((d) => [d.path, truth.bridgePaths.has(d.path) ? 'bridge' : 'other']);
+  check('drafts[] / held[] per-row origin', rowOrigins([...console_.drafts, ...console_.held]),
+    wantOrigins([...console_.drafts, ...console_.held]));
 
   // The whole 30-point curve, not just its endpoint: a wrong intake *date*
   // moves points without moving the total.

@@ -225,6 +225,7 @@ export function createConfig(env = process.env) {
     WORKFLOW_STALE_DAYS: 90,
     RECENT_ACTIVITY_LIMIT: 6,
     DRAFT_LIMIT: 6,
+    SINCE_PASS_LIMIT: 50,
     REFRESH_MS: 30000,
   };
 }

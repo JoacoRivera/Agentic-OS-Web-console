@@ -4,6 +4,7 @@ import matter from 'gray-matter';
 import {
   MAINTENANCE_DUE_DAYS,
   MAINTENANCE_OVERDUE_DAYS,
+  capturesSincePass,
   classifyCaptures,
   ingestedSincePass,
   isLogFile,
@@ -392,6 +393,7 @@ export async function computeMetrics(config, now = new Date()) {
         name: page.name,
         path: page.path,
         mtime: new Date(page.mtimeMs).toISOString(),
+        origin: item.origin,
         ...extra(item),
       }));
   const draftN = buckets.draft.length;
@@ -403,6 +405,13 @@ export async function computeMetrics(config, now = new Date()) {
     mismatchN: buckets.ingested.filter((i) => i.mismatch).length,
     layoutWarningN: buckets.layoutWarning.length,
     holdWarningN: buckets.holdWarning.length,
+    // Memory Bridge captures per bucket (memory repo ADR-0003); origin is an
+    // attribute, never a state — these are subsets of draftN/heldN/ingestedN.
+    bridge: {
+      draftN: buckets.draft.filter((i) => i.origin === 'bridge').length,
+      heldN: buckets.onHold.filter((i) => i.origin === 'bridge').length,
+      ingestedN: buckets.ingested.filter((i) => i.origin === 'bridge').length,
+    },
   };
   const drafts = listed(buckets.draft);
   const held = listed(buckets.onHold, (item) => ({ reason: item.hold }));
@@ -463,6 +472,23 @@ export async function computeMetrics(config, now = new Date()) {
   // Every wiki/ page lint scans (index/README included), the log excepted.
   // Accepted cost: this re-reads pages the lineage pass already read (~400 small files).
   const reviewBy = await collectReviewBy(repoRoot, byRoot.wiki.map((p) => p.path), now);
+  // ---- captures ingested since that pass, by origin ----
+  // Full counts in byOrigin; the list is capped, bridge rows first so the cap
+  // drops `other` rows before any bridge row. Path/name/date/origin only.
+  const sinceItems = capturesSincePass(buckets, firstIngest, logEntries, pass);
+  const sincePass = sinceItems && {
+    byOrigin: {
+      bridge: sinceItems.filter((i) => i.origin === 'bridge').length,
+      other: sinceItems.filter((i) => i.origin !== 'bridge').length,
+    },
+    items: sinceItems.slice(0, config.SINCE_PASS_LIMIT).map((i) => ({
+      name: rawByPath.get(i.path)?.name ?? path.basename(i.path, '.md'),
+      path: i.path,
+      origin: i.origin,
+      ingestedOn: i.ingestedOn,
+    })),
+    truncated: sinceItems.length > config.SINCE_PASS_LIMIT,
+  };
 
   return {
     wikiN: wiki.length,
@@ -500,6 +526,7 @@ export async function computeMetrics(config, now = new Date()) {
       overdueDays: MAINTENANCE_OVERDUE_DAYS,
       ingestedSincePass: ingestedSincePass(buckets, firstIngest, logEntries, pass),
       reviewBy, // never feeds healthStale/overdue — the cadence is the pass alone
+      sincePass,
     },
     trend: weekTotal > 0 ? 'ACTIVE' : 'IDLE',
     generatedAt: now.toISOString(),

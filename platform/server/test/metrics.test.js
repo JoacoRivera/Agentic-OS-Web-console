@@ -368,6 +368,7 @@ test('captures: Draft / Ingested by the Status: line or ingestion evidence (ADR-
     mismatchN: 3,
     layoutWarningN: 0,
     holdWarningN: 0,
+    bridge: { draftN: 0, heldN: 0, ingestedN: 0 },
   });
   assert.equal('apprN' in metrics, false);
   assert.deepEqual(

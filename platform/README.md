@@ -79,13 +79,20 @@ wiki+raw+templates minus `_template`; **double-counts a promoted item** — neve
 `capN = draftN + heldN + ingestedN` with `drafts[]`/`held[]` and the count-only
 `captures.{legacyApprovedN, mismatchN, layoutWarningN, holdWarningN}` — Draft / on hold /
 Ingested classified exactly as the memory repo's capture inventory does (its ADR-0002: no
-triage or approval; legacy `Status: Approved` = Ingested; `server/src/captures.js`);
+triage or approval; legacy `Status: Approved` = Ingested; `server/src/captures.js`),
+plus the **capture origin** — `captures.bridge.{draftN, heldN, ingestedN}` and `origin`
+(`bridge | other`) on each `drafts[]`/`held[]` row, `bridge` when a header `Source:` line
+(before the first `## ` heading) names the memory repo's `Agentic OS Memory Bridge automatic
+capture` (an attribute, never a state);
 `knowledgeN` plus lineage coverage; a 30-day
 knowledge-intake `series` keyed on explicit `source_id` + `knowledge_intake_date`
 origins, with `promoted_from` pages resolving to those origins instead of counting
 again (ADR-0003); a 7-day `week` by mtime (`weekTotal`, `activeDays`); `recent`; `health`
 from the newest `lint | maintenance pass` entry across `wiki/log.md` and its archive (due at
-7+ days, `overdue` at 10+, plus `ingestedSincePass`, and `reviewBy` — the wiki-lint check-25
+7+ days, `overdue` at 10+, plus `ingestedSincePass`; `sincePass` — `null` with no pass on
+record, else `{byOrigin: {bridge, other}, items: [{name, path, origin, ingestedOn}],
+truncated}`: full counts by origin and a list capped at `SINCE_PASS_LIMIT` (50), bridge rows
+first; paths and dates only, never `Source:` text; and `reviewBy` — the wiki-lint check-25
 recount of inline `review-by: YYYY-MM-DD` dates on every `wiki/` page but the log:
 `dueN`/`malformedN`/`pendingN`, `nextDue`, and at most 20 `{path, line, date, state}` items,
 information only, never moving the cadence); `trend`.
