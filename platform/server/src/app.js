@@ -29,6 +29,7 @@ import { buildDocsTree, readDocFile, searchDocs, findBacklinks } from './docs.js
 import { queryMemory } from './memory.js';
 import { listWorkflows, getWorkflow } from './workflows.js';
 import { listSkills } from './skills.js';
+import { listEvals } from './evals.js';
 import { listOperations } from './operations.js';
 import { createExecutor } from './executor.js';
 import { readAuditTail } from './audit.js';
@@ -187,6 +188,17 @@ export function createApp(config, { executor = createExecutor(config), financeCa
       res.json(await listSkills(config));
     } catch (err) {
       res.status(500).json({ error: 'skills-failed', message: err.message });
+    }
+  });
+
+  // Evals view (ADR-0001): read-only scan of the verdicts the owner recorded
+  // under wiki/workflows/evals/ — mirrors memory-repo lint checks 9 and 23.
+  // The console never runs or judges an eval.
+  app.get('/api/evals', async (req, res) => {
+    try {
+      res.json(await listEvals(config));
+    } catch (err) {
+      res.status(500).json({ error: 'evals-failed', message: err.message });
     }
   });
 

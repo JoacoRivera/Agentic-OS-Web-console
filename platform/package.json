@@ -20,7 +20,8 @@
     "check:metrics-groundtruth": "node --env-file-if-exists=.env scripts/check-metrics-groundtruth.mjs",
     "check:memory-recall": "node --env-file-if-exists=.env scripts/check-memory-recall.mjs",
     "check:family-health": "node --env-file-if-exists=.env scripts/check-family-health.mjs",
-    "check:memory-stats-parity": "node --env-file-if-exists=.env scripts/check-memory-stats-parity.mjs"
+    "check:memory-stats-parity": "node --env-file-if-exists=.env scripts/check-memory-stats-parity.mjs",
+    "check:evals": "node --env-file-if-exists=.env scripts/check-evals.mjs"
   },
   "dependencies": {
     "gray-matter": "^4.0.3"

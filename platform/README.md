@@ -26,6 +26,7 @@ yet) — see ADR-0005.
 | `npm run check:memory-recall` | `/api/memory/query` vs the memory repo's own `scripts/wiki_recall.py` (run with `--root`) on fixed and title-derived questions, both modes: pages indexed/matched, order, scores, tags, summaries. Needs `python3` + PyYAML; no groundtruth = failure (exit 2). **Not** in the executable allowlist (ADR-0001), not in `verify` or CI |
 | `npm run check:family-health` | Family Health record parses and stays confined to its own root; prints counts only; skips when `HEALTH_REPO_ROOT` is unset. **Not** in the executable allowlist (ADR-0010) |
 | `npm run check:memory-stats-parity` | `/api/metrics.flow` vs the memory repo's `scripts/memory-stats.py --format json` (run with `--today` = the API's day); terminal-only, runs memory-repo Python, so **not** in the executable allowlist, the Operations catalog or `verify` (ADR-0001). Skips when the script or `python3` is absent |
+| `npm run check:evals` | `/api/evals` vs an independent recount of `wiki/workflows/evals/` (result files, `## ` headings, verdict totals, cases, last full-suite run); prints counts only. **Not** in the executable allowlist (ADR-0001) |
 
 ## Test strategy
 
@@ -191,6 +192,51 @@ The registry, `verify`, and `check:skills` report whatever count they observe; n
 an expected total. The 15 skills seen on 2026-07-30 are a dated snapshot under
 [ADR-0009](../docs/adr/0009-canonical-aos-skill-catalog-is-discovered.md), not a code
 constant.
+
+## Evals (`GET /api/evals`)
+
+A read-only view of the eval verdicts the owner recorded in the memory repo. The console
+never runs, drafts or judges an eval (ADR-0001): there is no Operation for it and nothing
+on the executable allowlist. `server/src/evals.js` mirrors memory-repo lint
+(`scripts/aos_wiki/lint.py`) line for line, and changes when those checks change:
+
+- **Check 9 (format).** Every `*.md` under `wiki/workflows/evals/results/` (recursive;
+  `README.md`/`_template.md` exempt) must be named `YYYY-MM-DD.md` (else `bad-filename`,
+  file excluded), carry the H1 `# Eval Results — <date>` (else `bad-h1`, runs kept), and
+  head each record with `## eval-<slug>[ (subject)] — PASS|PARTIAL|FAIL[ (note)]` (else
+  `malformed-heading`, no run, its fields attach to nothing). Each block needs the fields
+  `target`, `type`, `must_include`, `must_not_include`, `verification`, `action taken`
+  (else `missing-fields`, run kept); a file with no block is `no-run-blocks`. All of it
+  runs on lint's `strip_code` (fenced blocks and inline code removed).
+- **Check 23 (suite clock).** A case whose id heads no run block is *never run* (the loose
+  `^## eval-…` match, so a malformed heading still counts as run). A results file with the
+  line `Run: full monthly suite` before its first `## ` is a full-suite run; the suite is
+  *due* at 28 days or more, or when no full-suite run exists. Case id = the first
+  `id: eval-…` in the case page, else `eval-<stem>`.
+
+Two case pages declaring the same id keep the first (path order) as the case; the other is
+surfaced as a `duplicate-case-id` problem (lint has no rule against it).
+
+Response: `evals[]` (union of case ids and run ids, sorted) with `case`, `everRun` (check
+23's loose match — a case whose headings are all malformed is run but has no well-formed
+record, and the view says so instead of "never run"), `lastRunDate`, `latest`, `counts`,
+and `runs` newest first (file date descending, then file order —
+`orderNote` says so); `suite` with `cases`, `resultFiles`, `runs`, `lastRunDate`,
+`fullSuiteDates`, `lastFullSuiteDate`, `neverFullSuite`, `ageDays`, `dueDays`, `due`,
+`neverRun`, `withoutCase` (ids with runs but no case page); `problemCount` and up to 20
+`problems` as `{path, line, reason}` — never file text. Record bodies stay in the file; the
+view links each run and case page into Documentation.
+
+Known divergences from lint: the filename date must be literally `YYYY-MM-DD` (Python's
+`date.fromisoformat` also accepts basic/week forms), lines split on `\r\n|\r|\n`, and
+symlinked files and directories are not followed (lint's `rglob` reads symlinked files).
+
+`npm run check:evals` recounts `wiki/workflows/evals/` with its own walk (symlinks skipped,
+as above) and plain line-prefix counting — result files, `bad-filename` problems, `## `
+headings, verdict totals, case files (cases + `duplicate-case-id` problems), last
+full-suite run — and exits non-zero on any mismatch. The total problem count is printed as
+information only: lint itself is the format gate. With no `evals/` directory it
+passes with zeros.
 
 ## Family Health (`GET /api/family-health/*`, ADR-0010)
 
