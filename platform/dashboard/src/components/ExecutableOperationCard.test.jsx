@@ -411,4 +411,31 @@ describe('ExecutableOperationCard', () => {
     vi.useRealTimers();
     expect(snapshotCalls()).toHaveLength(1);
   });
+
+  test('calls onFinished once with the final snapshot', async () => {
+    const user = userEvent.setup();
+    FakeEventSource.instances = [];
+    vi.stubGlobal('EventSource', FakeEventSource);
+    const fetchMock = vi.fn((url) => {
+      if (url === DRY_RUN_URL) {
+        return Promise.resolve(jsonResponse({ confirmToken: 'tok-1', command: 'npm run check:demo', cwd: '/repo' }));
+      }
+      if (url === RUN_URL) return Promise.resolve(jsonResponse({ runId: 'run-5' }, 202));
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onFinished = vi.fn();
+    render(<ExecutableOperationCard op={op} onFinished={onFinished} />);
+    await user.click(screen.getByRole('button', { name: 'dry-run' }));
+    await user.click(await screen.findByRole('button', { name: /confirm & run/i }));
+    await screen.findByText(/streaming · run run-5/);
+    expect(onFinished).not.toHaveBeenCalled();
+
+    const snapshot = { status: 'ok', exitCode: 0, durationMs: 10, gitAvailable: false, stdout: '', stderr: '' };
+    act(() => {
+      FakeEventSource.instances[0].emit('done', snapshot);
+    });
+    expect(onFinished).toHaveBeenCalledTimes(1);
+    expect(onFinished).toHaveBeenCalledWith(snapshot);
+  });
 });

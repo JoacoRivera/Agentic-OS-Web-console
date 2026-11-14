@@ -22,7 +22,8 @@
     "check:family-health": "node --env-file-if-exists=.env scripts/check-family-health.mjs",
     "check:memory-stats-parity": "node --env-file-if-exists=.env scripts/check-memory-stats-parity.mjs",
     "check:evals": "node --env-file-if-exists=.env scripts/check-evals.mjs",
-    "check:session-status": "node --env-file-if-exists=.env scripts/check-session-status.mjs"
+    "check:session-status": "node --env-file-if-exists=.env scripts/check-session-status.mjs",
+    "check:wiki-structure": "node --env-file-if-exists=.env scripts/check-wiki-structure.mjs"
   },
   "dependencies": {
     "gray-matter": "^4.0.3"

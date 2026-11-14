@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { EXECUTABLE_ALLOWLIST } from './operations.js';
 import { appendAuditEntry } from './audit.js';
+import { parseWikiLintReport } from './wikiLint.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PLATFORM_DIR = path.resolve(__dirname, '../..');
@@ -31,11 +32,33 @@ const PLATFORM_DIR = path.resolve(__dirname, '../..');
  *   line is written *before* the run is reported finished: status,
  *   finishedAt, the single-flight release and the `done` event are published
  *   together only once the append has settled.
+ * - An id with a result parser (today only `check:wiki-structure`, ADR-0001
+ *   amendment 2026-11-14) also gets a structured `result`, parsed from the
+ *   FULL stdout before the audit tail cap and stored additively on the
+ *   snapshot and the audit line. A parser can never fail the run.
  */
 
 /** Fixed command table: every allowlisted id is exactly `npm run <id>`. */
 function defaultCommands() {
   return Object.fromEntries(EXECUTABLE_ALLOWLIST.map((id) => [id, ['npm', 'run', id]]));
+}
+
+/**
+ * Per-id result parsers, applied to the full stdout + exit code when a run
+ * finishes. Ids without one get `result: null`.
+ */
+const RESULT_PARSERS = {
+  'check:wiki-structure': parseWikiLintReport,
+};
+
+function parseResult(parsers, op, stdout, exitCode) {
+  const parser = parsers[op];
+  if (!parser) return null;
+  try {
+    return parser(stdout, exitCode);
+  } catch (err) {
+    return { parsed: false, reason: `result parser failed: ${err.message}` };
+  }
 }
 
 export const CONFIRM_TOKEN_TTL_MS = 10 * 60 * 1000;
@@ -67,13 +90,19 @@ function gitCapture(repoRoot, args) {
 }
 
 /**
- * Build the executor. `commands`, `timeoutMs` and `appendAudit` are test
- * seams — production callers take the defaults, so the table always mirrors
- * the allowlist and every run is audited through appendAuditEntry.
+ * Build the executor. `commands`, `timeoutMs`, `appendAudit` and
+ * `resultParsers` are test seams — production callers take the defaults, so
+ * the table always mirrors the allowlist and every run is audited through
+ * appendAuditEntry.
  */
 export function createExecutor(
   config,
-  { commands = defaultCommands(), timeoutMs = RUN_TIMEOUT_MS, appendAudit = appendAuditEntry } = {}
+  {
+    commands = defaultCommands(),
+    timeoutMs = RUN_TIMEOUT_MS,
+    appendAudit = appendAuditEntry,
+    resultParsers = RESULT_PARSERS,
+  } = {}
 ) {
   const tokens = new Map(); // token → { id, expiresAt }
   const jobs = new Map(); // runId → job (insertion order = start order)
@@ -128,6 +157,7 @@ export function createExecutor(
       gitAvailable: job.gitAvailable,
       changedFiles: job.changedFiles,
       gitDiff: job.gitDiff,
+      result: job.result,
     };
   }
 
@@ -200,6 +230,9 @@ export function createExecutor(
     } finally {
       // When the command finished — not when the audit line landed.
       const finishedAt = new Date().toISOString();
+      // Parsed before the append so the audit line carries it; the job stays
+      // `running` until then, so nobody sees a result without its status.
+      job.result = parseResult(resultParsers, job.op, job.stdout, job.exitCode);
       // Audit first, same line shape as the synchronous era. The job stays
       // `running` (and single-flight held) until the append has settled, so
       // anyone who sees a finished run can read its audit line.
@@ -216,6 +249,7 @@ export function createExecutor(
             stdout: tail(job.stdout, AUDIT_OUTPUT_CAP),
             stderr: tail(job.stderr, AUDIT_OUTPUT_CAP),
           },
+          result: job.result,
         });
       } catch (err) {
         job.stderr += `\naudit append failed: ${err.message}`;
@@ -278,6 +312,7 @@ export function createExecutor(
         gitAvailable: null,
         changedFiles: null,
         gitDiff: null,
+        result: null,
         listeners: new Set(),
       };
       running = job.runId;

@@ -61,6 +61,46 @@ test('executable entries are exactly the permanent allowlist plus flagged migrat
   assert.ok(!EXECUTABLE_ALLOWLIST.includes('check:hud-parity'));
 });
 
+test('the permanent allowlist is exactly the seven ADR-0001 entries — widening it needs an amendment', () => {
+  // ADR-0001 §Consequences + the 2026-11-14 amendment (check:wiki-structure).
+  // Any change here is an architecture decision, not a code change.
+  assert.deepEqual(EXECUTABLE_ALLOWLIST, [
+    'verify',
+    'check:paths',
+    'check:docs',
+    'check:workflows',
+    'check:skills',
+    'check:metrics-groundtruth',
+    'check:wiki-structure',
+  ]);
+});
+
+test('the wiki lint splits into a guided Skill card and an executable deterministic check', async () => {
+  const body = await getCatalog();
+  const guided = body.operations.find((op) => op.id === 'maintenance-pass');
+  assert.equal(guided.type, 'guided');
+  assert.equal(guided.skill, 'aos-wiki-lint');
+  const exec = body.operations.find((op) => op.id === 'check:wiki-structure');
+  assert.equal(exec.type, 'executable');
+  assert.equal(exec.skill, null);
+  assert.equal(exec.commandPreview, 'npm run check:wiki-structure');
+  // The interpreter shown is the one that runs, in the ADR-0001 amendment's
+  // wording (scripts/check-wiki-structure.mjs resolveLintCommand).
+  assert.match(exec.description, /scripts\/wiki-lint\.py in REPO_ROOT/);
+  assert.ok(
+    exec.description.includes('interpreter: <REPO_ROOT>/.venv/bin/python when present, else python3 from PATH'),
+    exec.description
+  );
+});
+
+test('POST dry-run of check:wiki-structure shows its fixed npm command', async () => {
+  const res = await request(app)
+    .post('/api/operations/check%3Awiki-structure/dry-run')
+    .set('Host', '127.0.0.1:3001');
+  assert.equal(res.status, 200);
+  assert.equal(res.body.command, 'npm run check:wiki-structure');
+});
+
 test('params are guided-only preview fill-ins with matching <name> tokens (P2)', async () => {
   const body = await getCatalog();
   const withParams = body.operations.filter((op) => op.params.length > 0);

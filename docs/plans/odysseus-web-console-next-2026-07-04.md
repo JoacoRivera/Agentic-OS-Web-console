@@ -101,6 +101,12 @@ without it, today's refusal behavior is unchanged.
 
 ## Phase 6 — `check:wiki-structure` (requires an ADR-0001 amendment)
 
+> **Shipped 2026-11-14.** Allowlisted by the ADR-0001 amendment of 2026-11-14 (accepted).
+> Implemented as an npm wrapper (`npm run check:wiki-structure` →
+> `platform/scripts/check-wiki-structure.mjs`, fixed argv, minimal env) rather than a
+> direct command-table row, so every row stays `npm run <id>`. The latest result is shown
+> in the Maintenance view.
+
 ADR-0001 already anticipates this split: `/aos-wiki-lint` (LLM judgment,
 guided forever) vs a deterministic `check:wiki-structure` (executable). The
 memory repo's `scripts/wiki-lint.py` *is* that deterministic half and already

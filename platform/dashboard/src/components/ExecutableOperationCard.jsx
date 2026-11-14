@@ -26,8 +26,9 @@ function abortableDelay(ms, signal) {
  * async run (202 + runId, roadmap §4.2) whose output streams live over SSE,
  * with changed files and git diff at completion. The id only selects a
  * server-side command-table row; nothing typed here reaches a shell.
+ * `onFinished(snapshot)` (optional) is called once with the final snapshot.
  */
-export default function ExecutableOperationCard({ op, lastRun }) {
+export default function ExecutableOperationCard({ op, lastRun, onFinished }) {
   const [dry, setDry] = useState(null); // dry-run response awaiting confirm
   const [live, setLive] = useState(null); // { runId, text } while streaming
   const [result, setResult] = useState(null); // final run snapshot
@@ -104,6 +105,7 @@ export default function ExecutableOperationCard({ op, lastRun }) {
     setLive(null);
     setResult(snapshot);
     setBusy(false);
+    onFinished?.(snapshot);
   };
 
   // Fallback when SSE drops: poll the snapshot route until the run ends.
